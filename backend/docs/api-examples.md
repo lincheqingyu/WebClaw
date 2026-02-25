@@ -70,9 +70,10 @@ curl http://localhost:3000/health
 
 ---
 
-### 2. 对话
+### 2. 对话（HTTP simple / SSE）
 
 发送对话消息，支持同步返回完整响应或通过 SSE 流式接收。通过请求体中的 `stream` 参数控制响应方式。
+`mode` 用于选择模式：`simple` 为单次请求，todo 只生成不自动执行；`thinking` 为复杂任务模式（HTTP 可用，但多轮交互推荐使用 WebSocket）。
 
 ```
 POST /api/v1/chat
@@ -89,13 +90,18 @@ POST /api/v1/chat
       "content": "消息内容"                       // 不能为空字符串
     }
   ],
+  // 可选：模式选择，默认 simple
+  "mode": "simple",
   // 可选：启用流式响应（默认 false）
   "stream": false,
-  // 可选：指定 Provider 名称
-  "provider": "openai-compatible",
+  // 可选：指定模型
+  "model": "glm-4-plus",
+  // 可选：指定 API 基础地址
+  "baseUrl": "https://open.bigmodel.cn/api/paas/v4/",
+  // 可选：指定 API Key（不传则使用 LLM_API_KEY）
+  "apiKey": "sk-xxx",
   // 可选：对话参数
   "options": {
-    "model": "glm-4-plus",    // 模型名称
     "temperature": 0.7,        // 温度，范围 0~2
     "maxTokens": 8192          // 最大生成 token 数，正整数
   }
@@ -105,11 +111,14 @@ POST /api/v1/chat
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `messages` | `Array` | 是 | 对话消息列表，至少一条 |
+| `mode` | `string` | 否 | 模式，`simple` 或 `thinking`，默认 `simple` |
 | `stream` | `boolean` | 否 | 是否启用流式响应，默认 `false` |
-| `provider` | `string` | 否 | 指定 Provider 名称 |
-| `options` | `object` | 否 | 对话参数（model、temperature、maxTokens） |
+| `model` | `string` | 否 | 模型名称 |
+| `baseUrl` | `string` | 否 | API 基础地址 |
+| `apiKey` | `string` | 否 | API Key |
+| `options` | `object` | 否 | 对话参数（temperature、maxTokens） |
 
-#### curl 示例 — 同步请求
+#### curl 示例 — simple 同步请求
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/chat \
@@ -117,11 +126,12 @@ curl -X POST http://localhost:3000/api/v1/chat \
   -d '{
     "messages": [
       { "role": "user", "content": "你好，请介绍一下你自己" }
-    ]
+    ],
+    "mode": "simple"
   }'
 ```
 
-#### curl 示例 — 带选项的同步请求
+#### curl 示例 — simple 带选项的同步请求
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/chat \
@@ -131,15 +141,15 @@ curl -X POST http://localhost:3000/api/v1/chat \
       { "role": "system", "content": "你是一个专业的编程助手" },
       { "role": "user", "content": "用 TypeScript 写一个快速排序函数" }
     ],
+    "mode": "simple",
     "options": {
-      "model": "glm-4-plus",
       "temperature": 0.3,
       "maxTokens": 2048
     }
   }'
 ```
 
-#### curl 示例 — 流式请求
+#### curl 示例 — simple 流式请求
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/chat \
@@ -149,6 +159,7 @@ curl -X POST http://localhost:3000/api/v1/chat \
     "messages": [
       { "role": "user", "content": "用三句话介绍 TypeScript" }
     ],
+    "mode": "simple",
     "stream": true
   }'
 ```
@@ -262,7 +273,7 @@ async function chatStream(messages: Array<{ role: string; content: string }>) {
   const response = await fetch('http://localhost:3000/api/v1/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, stream: true }),
+    body: JSON.stringify({ messages, stream: true, mode: 'simple' }),
   })
 
   if (!response.ok) {
@@ -324,7 +335,7 @@ async function chatStreamWithParser(
   const response = await fetch('http://localhost:3000/api/v1/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, stream: true }),
+    body: JSON.stringify({ messages, stream: true, mode: 'simple' }),
   })
 
   if (!response.ok) {
@@ -348,6 +359,49 @@ async function chatStreamWithParser(
 ```
 
 ---
+
+### 3. 对话（WebSocket 深度思考）
+
+WebSocket 用于复杂任务与多轮交互，沿用 HTTP 请求体字段。推荐使用 `mode: "thinking"`。
+
+```
+WS /api/v1/chat/ws
+```
+
+#### WS 请求示例 — 首次消息
+
+```json
+{
+  "mode": "thinking",
+  "messages": [
+    { "role": "user", "content": "用todo列一个查询数据库获取信息的示例" }
+  ],
+  "stream": true
+}
+```
+
+#### WS 请求示例 — 用户补充信息
+
+```json
+{
+  "mode": "thinking",
+  "messages": [
+    { "role": "user", "content": "查询对象是张三，ID=123456" }
+  ],
+  "stream": true
+}
+```
+
+#### WS 事件示例（服务端推送）
+
+```json
+{ "event": "message_delta", "content": "..." }
+{ "event": "todo_write", "content": "[ ] 确定查询目标和数据表\n(0/3 已完成)" }
+{ "event": "subagent_start", "todoIndex": 0, "content": "确定查询目标和数据表" }
+{ "event": "subagent_result", "todoIndex": 0, "result": "请提供查询对象或ID" }
+{ "event": "need_user_input", "prompt": "请提供查询对象或ID" }
+{ "event": "waiting" }
+```
 
 ## 错误码参考
 

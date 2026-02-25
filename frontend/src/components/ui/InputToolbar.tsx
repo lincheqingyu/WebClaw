@@ -4,6 +4,10 @@ import { ArrowUp, Plus } from 'lucide-react'
 interface InputToolbarProps {
   /** 输入框是否有内容（控制发送按钮状态） */
   hasContent: boolean
+  /** 当前模式 */
+  mode: 'simple' | 'thinking'
+  /** 切换模式 */
+  onModeChange: (mode: 'simple' | 'thinking') => void
   /** 点击附件/加号按钮 */
   onPlusClick: () => void
   /** 点击发送按钮 */
@@ -16,24 +20,43 @@ interface InputToolbarProps {
  * 左侧：圆形加号按钮（附件入口）
  * 右侧：发送按钮（有内容时高亮，无内容时禁用态）
  */
-export function InputToolbar({ hasContent, onPlusClick, onSend }: InputToolbarProps) {
+export function InputToolbar({
+  hasContent,
+  mode,
+  onModeChange,
+  onPlusClick,
+  onSend,
+}: InputToolbarProps) {
   return (
     <div className="flex items-center justify-between px-3 pb-3">
       {/* 左侧：加号按钮 */}
-      <button
-        type="button"
-        onClick={onPlusClick}
-        className={clsx(
-          'flex items-center justify-center',
-          'size-8 rounded-full',
-          'border border-border',
-          'text-text-secondary',
-          'transition-colors hover:bg-hover hover:text-text-primary',
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onPlusClick}
+          className={clsx(
+            'flex items-center justify-center',
+            'size-8 rounded-full',
+            'border border-border',
+            'text-text-secondary',
+            'transition-colors hover:bg-hover hover:text-text-primary',
+          )}
+          aria-label="添加附件"
+        >
+          <Plus className="size-4" />
+        </button>
+
+        {mode === 'thinking' && (
+          <button
+            type="button"
+            onClick={() => onModeChange('simple')}
+            className="rounded-full border border-border bg-surface px-2 py-1 text-xs text-text-secondary"
+            aria-label="关闭 thinking 模式"
+          >
+            thinking
+          </button>
         )}
-        aria-label="添加附件"
-      >
-        <Plus className="size-4" />
-      </button>
+      </div>
 
       {/* 右侧：发送按钮 */}
       <button

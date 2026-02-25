@@ -1,5 +1,7 @@
 import {Moon, Settings, Sun} from 'lucide-react'
-import {ChatInput} from '../../../components/ui/ChatInput'
+import { ChatInput } from '../../../components/ui/ChatInput'
+import { MessageList } from '../../../components/chat/MessageList'
+import { useChat, type ModelConfig } from '../../../hooks/useChat'
 
 /**
  * 组件的 Props 类型定义
@@ -13,11 +15,11 @@ import {ChatInput} from '../../../components/ui/ChatInput'
  * → () => void 表示"一个没有参数、没有返回值的函数"
  */
 interface ConversationAreaProps {
-    isSettingsOpen: boolean      // 设置抽屉是否打开（用来决定点击区域是否关闭抽屉）
     onSettingsToggle: () => void // 切换设置抽屉的回调函数
-    onSettingsClose: () => void  // 关闭设置抽屉的回调函数
     isDark: boolean               // 当前是否是暗色模式
     onThemeToggle: () => void     // 切换主题的回调
+    systemPrompt: string
+    modelConfig: ModelConfig
 }
 
 /**
@@ -28,12 +30,18 @@ interface ConversationAreaProps {
  * → 包含一个浮动的设置按钮（右上角）
  */
 export function ConversationArea({
-                                     isSettingsOpen,
                                      onSettingsToggle,
                                      isDark,
-                                     onSettingsClose,
-                                     onThemeToggle
+                                     onThemeToggle,
+                                     systemPrompt,
+                                     modelConfig,
                                  }: ConversationAreaProps) {
+    const { mode, setMode, messages, send, isStreaming, isWaiting } = useChat({
+        systemPrompt,
+        modelConfig,
+    })
+    const hasSent = messages.length > 0
+
     return (
         <div
             className={[
@@ -42,8 +50,6 @@ export function ConversationArea({
                 // 外观：白色背景 + 右侧边框作为分隔线
                 "border-r border-border bg-surface-alt",
             ].join(" ")}
-            // 点击对话区域时，如果抽屉开着就关闭它（常见的 UX 模式）
-            onClick={isSettingsOpen ? onSettingsClose : undefined}
         >
             <button
                 type="button"
@@ -86,10 +92,39 @@ export function ConversationArea({
                 <Settings className="size-5" />
             </button>
 
-            {/* ---------- 对话输入区域 ---------- */}
-            <div className="flex h-full flex-col items-center justify-center">
-                <ChatInput />
-            </div>
+            {/* ---------- 对话区域 ---------- */}
+            {!hasSent ? (
+                <div className="flex h-full flex-col items-center justify-center">
+                    <div className="mb-8 text-center">
+                        <div className="text-2xl font-semibold text-text-primary">
+                            有什么我可以帮你的？
+                        </div>
+                        <div className="mt-2 text-sm text-text-muted">
+                            支持 simple 与 thinking 两种模式
+                        </div>
+                    </div>
+                    <ChatInput
+                        mode={mode}
+                        onModeChange={setMode}
+                        onSend={send}
+                        showSuggestions
+                    />
+                </div>
+            ) : (
+                <div className="flex h-full min-h-0 flex-col">
+                    <div className="flex-1 min-h-0">
+                        <MessageList messages={messages} isStreaming={isStreaming} isWaiting={isWaiting} />
+                    </div>
+                    <div className="pb-6">
+                        <ChatInput
+                            mode={mode}
+                            onModeChange={setMode}
+                            onSend={send}
+                            showSuggestions={false}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

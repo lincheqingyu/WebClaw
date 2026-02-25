@@ -20,6 +20,8 @@ export interface MainAgentOptions {
   temperature?: number
   signal?: AbortSignal
   onEvent?: (event: AgentEvent) => void
+  contextMessages?: AgentMessage[]
+  autoRunTodos?: boolean
 }
 
 /** 主 Agent 运行结果 */
@@ -32,7 +34,17 @@ export interface MainAgentResult {
  * 接收用户消息，通过 agentLoop 驱动 LLM 对话和工具调用
  */
 export async function runMainAgent(options: MainAgentOptions): Promise<MainAgentResult> {
-  const { messages, model, apiKey, temperature, signal, onEvent } = options
+  const {
+    messages,
+    model,
+    apiKey,
+    temperature,
+    signal,
+    onEvent,
+    contextMessages = [],
+    autoRunTodos = true,
+  } = options
+
 
   const systemPrompt = buildMainSystemPrompt()
   const tools = createAgentTools()
@@ -45,7 +57,7 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
 
   const stream = agentLoop(
     messages,
-    { systemPrompt, messages: [], tools },
+    { systemPrompt, messages: contextMessages, tools },
     {
       model,
       apiKey,
@@ -94,23 +106,25 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     }
 
     // todo_write 自动执行 pending items
-    if (
-      event.type === 'tool_execution_end' &&
-      event.toolName === 'todo_write' &&
-      !event.isError
-    ) {
-      const result = event.result as { details?: { hasPending?: boolean } }
-      if (result?.details?.hasPending) {
-        try {
-          for await (const [idx, item, subResult] of runPendingTodosWithModel(model, apiKey)) {
-            logger.info(`Todo #${idx} (${item.content.slice(0, 30)}) 完成`)
-            logger.debug(`子 Agent 结果: ${subResult.slice(0, 200)}`)
+      if (autoRunTodos) {
+        if (
+          event.type === 'tool_execution_end' &&
+          event.toolName === 'todo_write' &&
+          !event.isError
+        ) {
+          const result = event.result as { details?: { hasPending?: boolean } }
+          if (result?.details?.hasPending) {
+            try {
+              for await (const [idx, item, subResult] of runPendingTodosWithModel(model, apiKey)) {
+                logger.info(`Todo #${idx} (${item.content.slice(0, 30)}) 完成`)
+                logger.debug(`子 Agent 结果: ${subResult.slice(0, 200)}`)
+              }
+            } catch (error) {
+              logger.error('自动执行 pending todos 失败:', error)
+            }
           }
-        } catch (error) {
-          logger.error('自动执行 pending todos 失败:', error)
         }
       }
-    }
 
     // 收集消息
     if (event.type === 'message_end') {
@@ -121,5 +135,5 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     onEvent?.(event)
   }
 
-  return { messages: allMessages }
+  return { messages: [...contextMessages, ...allMessages] }
 }

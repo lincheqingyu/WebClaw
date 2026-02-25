@@ -3,6 +3,14 @@ import { useState } from 'react'
 import { AutoResizeTextarea } from './AutoResizeTextarea'
 import { CategoryTags } from './CategoryTags'
 import { InputToolbar } from './InputToolbar'
+import type { ChatMode } from '../../hooks/useChat'
+
+interface ChatInputProps {
+  mode: ChatMode
+  onModeChange: (mode: ChatMode) => void
+  onSend: (message: string) => void
+  showSuggestions?: boolean
+}
 
 /**
  * 聊天输入框编排组件
@@ -10,7 +18,7 @@ import { InputToolbar } from './InputToolbar'
  * 管理输入状态，组合 AutoResizeTextarea + InputToolbar + CategoryTags。
  * 容器采用圆角 + 阴影样式，hover/focus-within 时阴影增强。
  */
-export function ChatInput() {
+export function ChatInput({ mode, onModeChange, onSend, showSuggestions = true }: ChatInputProps) {
   const [message, setMessage] = useState('')
 
   const hasContent = message.trim().length > 0
@@ -18,7 +26,7 @@ export function ChatInput() {
   /** 发送消息（暂时为空操作，后续接入） */
   const handleSend = () => {
     if (!hasContent) return
-    // TODO: 接入消息发送逻辑
+    onSend(message)
     setMessage('')
   }
 
@@ -31,6 +39,10 @@ export function ChatInput() {
   const handleCategorySelect = (label: string) => {
     // TODO: 接入分类逻辑
     setMessage(label)
+  }
+
+  const toggleThinking = () => {
+    onModeChange(mode === 'thinking' ? 'simple' : 'thinking')
   }
 
   return (
@@ -49,18 +61,21 @@ export function ChatInput() {
           value={message}
           onChange={setMessage}
           onSend={handleSend}
+          onToggleThinking={toggleThinking}
         />
 
         {/* 底部工具栏 */}
         <InputToolbar
           hasContent={hasContent}
+          mode={mode}
+          onModeChange={onModeChange}
           onPlusClick={handlePlusClick}
           onSend={handleSend}
         />
       </div>
 
       {/* 分类标签（输入框下方） */}
-      <CategoryTags onSelect={handleCategorySelect} />
+      {showSuggestions && <CategoryTags onSelect={handleCategorySelect} />}
     </div>
   )
 }

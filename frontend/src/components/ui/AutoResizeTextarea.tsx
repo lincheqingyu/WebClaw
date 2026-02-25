@@ -8,6 +8,8 @@ interface AutoResizeTextareaProps {
   onChange: (value: string) => void
   /** 发送回调（按 Enter 时触发） */
   onSend: () => void
+  /** 切换 thinking 模式 */
+  onToggleThinking: () => void
   /** 占位文字 */
   placeholder?: string
   /** 最大可见行数 */
@@ -25,16 +27,22 @@ export function AutoResizeTextarea({
   value,
   onChange,
   onSend,
+  onToggleThinking,
   placeholder = '有什么我可以帮你的？',
   maxRows = 8,
 }: AutoResizeTextareaProps) {
   const textareaRef = useAutoResize(value, maxRows)
 
-  /** 键盘事件：Enter 发送，Shift+Enter 换行 */
+  /** 键盘事件：Enter 换行，Ctrl+Enter 发送，Ctrl+P 切换模式 */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault()
       onSend()
+      return
+    }
+    if (e.key.toLowerCase() === 'p' && e.ctrlKey) {
+      e.preventDefault()
+      onToggleThinking()
     }
   }
 

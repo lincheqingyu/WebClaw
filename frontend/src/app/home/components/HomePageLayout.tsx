@@ -1,6 +1,55 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ConversationArea } from './ConversationArea'
 import { SettingsDrawer } from './SettingsDrawer'
+import type { ModelConfig } from '../../../hooks/useChat'
+
+interface SystemPromptItem {
+    id: string
+    title: string
+    prompt: string
+}
+
+const STORAGE_KEYS = {
+    prompts: 'webclaw.systemPrompts',
+    activePromptId: 'webclaw.activePromptId',
+    modelConfig: 'webclaw.modelConfig',
+}
+
+function loadPrompts(): SystemPromptItem[] {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEYS.prompts)
+        if (!raw) return []
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed : []
+    } catch {
+        return []
+    }
+}
+
+function loadActivePromptId(): string | null {
+    try {
+        return localStorage.getItem(STORAGE_KEYS.activePromptId)
+    } catch {
+        return null
+    }
+}
+
+function loadModelConfig(): ModelConfig {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEYS.modelConfig)
+        if (!raw) {
+            return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192 }
+        }
+        const parsed = JSON.parse(raw)
+        return {
+            model: parsed.model ?? 'glm-4.7',
+            temperature: Number(parsed.temperature ?? 0.7),
+            maxTokens: Number(parsed.maxTokens ?? 8192),
+        }
+    } catch {
+        return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192 }
+    }
+}
 
 /**
  * 主布局容器
@@ -20,6 +69,10 @@ export function HomePageLayout() {
     // useState<boolean> ← TypeScript 会自动推断类型，这里不需要手动标注
     const [isDark, setIsDark] = useState(false)
 
+    const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>(() => loadPrompts())
+    const [activePromptId, setActivePromptId] = useState<string | null>(() => loadActivePromptId())
+    const [modelConfig, setModelConfig] = useState<ModelConfig>(() => loadModelConfig())
+
     // ---------- 副作用：同步主题到 <html> 标签 ----------
 
     /**
@@ -38,6 +91,26 @@ export function HomePageLayout() {
             document.documentElement.classList.remove('dark')
         }
     }, [isDark])
+
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.prompts, JSON.stringify(systemPrompts))
+    }, [systemPrompts])
+
+    useEffect(() => {
+        if (activePromptId) {
+            localStorage.setItem(STORAGE_KEYS.activePromptId, activePromptId)
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.activePromptId)
+        }
+    }, [activePromptId])
+
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEYS.modelConfig, JSON.stringify(modelConfig))
+    }, [modelConfig])
+
+    const activePrompt = useMemo(() => {
+        return systemPrompts.find((p) => p.id === activePromptId) ?? null
+    }, [systemPrompts, activePromptId])
 
     // ---------- 事件处理函数 ----------
 
@@ -67,17 +140,23 @@ export function HomePageLayout() {
             ].join(" ")}
         >
             <ConversationArea
-                isSettingsOpen={isSettingsOpen}
                 onSettingsToggle={handleSettingsToggle}
-                onSettingsClose={handleSettingsClose}
                 isDark={isDark}
                 onThemeToggle={handleThemeToggle}
+                systemPrompt={activePrompt?.prompt ?? ''}
+                modelConfig={modelConfig}
             />
             <SettingsDrawer
                 isOpen={isSettingsOpen}
                 onClose={handleSettingsClose}
                 isDark={isDark}
                 onThemeToggle={handleThemeToggle}
+                systemPrompts={systemPrompts}
+                activePromptId={activePromptId}
+                onSystemPromptsChange={setSystemPrompts}
+                onActivePromptChange={setActivePromptId}
+                modelConfig={modelConfig}
+                onModelConfigChange={setModelConfig}
             />
         </div>
     )
