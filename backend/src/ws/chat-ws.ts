@@ -45,6 +45,14 @@ function toUserAgentMessages(
     }))
 }
 
+function extractSystemPrompt(messages: readonly { role: string; content: string }[]): string | undefined {
+  const chunks = messages
+    .filter((m) => m.role === 'system')
+    .map((m) => m.content.trim())
+    .filter(Boolean)
+  return chunks.length > 0 ? chunks.join('\n\n') : undefined
+}
+
 function shouldWaitForUserInput(text: string): boolean {
   const normalized = text.trim()
   if (!normalized) return false
@@ -130,6 +138,7 @@ async function runDeepMode(
   const apiKey = reqApiKey ?? config.LLM_API_KEY
 
   const agentMessages = toUserAgentMessages(messages)
+  const extraSystemPrompt = extractSystemPrompt(messages)
   let hasPendingTodos = false
 
   try {
@@ -139,6 +148,7 @@ async function runDeepMode(
       model: piModel,
       apiKey,
       temperature: options?.temperature,
+      extraSystemPrompt,
       autoRunTodos: false,
       onEvent: (event) => {
         if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {

@@ -11,6 +11,7 @@ import { createAgentTools } from './tools/index.js'
 import { runPendingTodosWithModel } from './sub-agent-runner.js'
 import { createTracker, MAX_ITERATIONS, MAX_TOOL_FAILURES } from './types.js'
 import { logger } from '../utils/logger.js'
+import { ensureMemoryFiles, loadMemoryInjectionText, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
 
 /** 主 Agent 运行参数 */
 export interface MainAgentOptions {
@@ -18,6 +19,7 @@ export interface MainAgentOptions {
   model: Model<'openai-completions'>
   apiKey: string
   temperature?: number
+  extraSystemPrompt?: string
   signal?: AbortSignal
   onEvent?: (event: AgentEvent) => void
   contextMessages?: AgentMessage[]
@@ -39,14 +41,21 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     model,
     apiKey,
     temperature,
+    extraSystemPrompt,
     signal,
     onEvent,
     contextMessages = [],
     autoRunTodos = true,
   } = options
 
+  await ensureMemoryFiles()
+  const memoryPrompt = await loadMemoryInjectionText()
 
-  const systemPrompt = buildMainSystemPrompt()
+  const baseSystemPrompt = buildMainSystemPrompt()
+  const systemPrompt = [baseSystemPrompt, memoryPrompt, extraSystemPrompt?.trim()]
+    .filter((part): part is string => Boolean(part && part.length > 0))
+    .join('\n\n')
+
   const tools = createAgentTools()
   const tracker = createTracker()
 
@@ -135,5 +144,7 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     onEvent?.(event)
   }
 
-  return { messages: [...contextMessages, ...allMessages] }
+  const mergedMessages = [...contextMessages, ...allMessages]
+  await recordMemoryTurnAndMaybeFlush(mergedMessages)
+  return { messages: mergedMessages }
 }

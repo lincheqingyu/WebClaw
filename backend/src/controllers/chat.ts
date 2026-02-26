@@ -6,8 +6,8 @@
 
 import {Router, type Router as RouterType} from 'express'
 import {z} from 'zod'
-import type {UserMessage} from '@mariozechner/pi-ai'
 import type {AgentMessage} from '@mariozechner/pi-agent-core'
+import type { AssistantMessage, UserMessage } from '@mariozechner/pi-ai'
 import {runMainAgent} from '../agent/index.js'
 import {createVllmModel} from '../agent/vllm-model.js'
 import {getConfig} from '../config/index.js'
@@ -17,17 +17,90 @@ import {logger} from '../utils/logger.js'
 import {chatRequestSchema} from '../types/api.js'
 
 const router: RouterType = Router()
+const MAX_CONTEXT_MESSAGES = 40
+
+function extractAssistantText(message: AgentMessage): string {
+    if (message.role !== 'assistant') return ''
+    const content = message.content as unknown
+    if (typeof content === 'string') return content
+    if (!Array.isArray(content)) return ''
+    return content
+        .map((part) => {
+            if (typeof part === 'string') return part
+            if (part && typeof part === 'object' && 'text' in part) {
+                const text = (part as { text?: unknown }).text
+                return typeof text === 'string' ? text : ''
+            }
+            return ''
+        })
+        .filter(Boolean)
+        .join('\n')
+}
 
 
-/** 将前端消息转为 UserMessage[]（只取 user 角色，pi-ai UserMessage.content 支持 string） */
-function toAgentMessages(
+/** 规范化前端消息：system 折叠到 extraSystemPrompt，其余消息在后端截断后进入上下文。 */
+function normalizeIncomingMessages(
     messages: readonly { role: string; content: string }[],
-): AgentMessage[] {
-    return messages.map((m): UserMessage => ({
-        role: 'user',
-        content: m.content,
-        timestamp: Date.now(),
-    }))
+    modelId: string,
+): {
+    promptMessages: AgentMessage[]
+    contextMessages: AgentMessage[]
+    extraSystemPrompt?: string
+} {
+    const systemChunks = messages
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content.trim())
+        .filter((text) => text.length > 0)
+
+    const llmMessages = messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .slice(-MAX_CONTEXT_MESSAGES)
+        .map((m): AgentMessage => {
+            if (m.role === 'user') {
+                const userMsg: UserMessage = {
+                    role: 'user',
+                    content: m.content,
+                    timestamp: Date.now(),
+                }
+                return userMsg
+            }
+
+            const assistantMsg: AssistantMessage = {
+                role: 'assistant',
+                content: [{ type: 'text', text: m.content }],
+                api: 'openai-completions',
+                provider: 'openai',
+                model: modelId,
+                usage: {
+                    input: 0,
+                    output: 0,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    totalTokens: 0,
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+                },
+                stopReason: 'stop',
+                timestamp: Date.now(),
+            }
+            return assistantMsg
+        })
+
+    const lastUserIndex = (() => {
+        for (let i = llmMessages.length - 1; i >= 0; i -= 1) {
+            if (llmMessages[i].role === 'user') return i
+        }
+        return -1
+    })()
+
+    const promptMessages = lastUserIndex >= 0 ? [llmMessages[lastUserIndex]] : []
+    const contextMessages =
+        lastUserIndex > 0 ? llmMessages.slice(0, lastUserIndex) : []
+
+    return {
+        promptMessages,
+        contextMessages,
+        extraSystemPrompt: systemChunks.length > 0 ? systemChunks.join('\n\n') : undefined,
+    }
 }
 
 /** POST /api/v1/chat - 对话（同步或流式） */
@@ -88,7 +161,10 @@ router.post('/chat', async (req, res, next) => {
         })
         const apiKey = reqApiKey ?? config.LLM_API_KEY
 
-        const agentMessages = toAgentMessages(messages)
+        const { promptMessages, contextMessages, extraSystemPrompt } = normalizeIncomingMessages(messages, piModel.id)
+        if (promptMessages.length === 0) {
+            throw createHttpError(400, '至少需要一条 user 消息')
+        }
 
         requestContext.resolved = {
             apiKey,
@@ -110,15 +186,21 @@ router.post('/chat', async (req, res, next) => {
 
         if (isStream) {
             initSSE(res)
+            let hasDelta = false
 
             await runMainAgent({
-                messages: agentMessages,
+                messages: promptMessages,
+                contextMessages,
                 model: piModel,
                 apiKey,
                 temperature: options?.temperature,
+                extraSystemPrompt,
                 signal: req.socket.destroyed ? AbortSignal.abort() : undefined,
                 autoRunTodos: mode !== 'simple',
                 onEvent: (event) => {
+                    // 输出模型流式返回的完整事件，便于定位流式中断/无内容问题
+                    logger.debug('chat stream event:', event)
+
                     // 流式推送 text_delta
                     if (
                         event.type === 'message_update' &&
@@ -126,7 +208,17 @@ router.post('/chat', async (req, res, next) => {
                     ) {
                         const delta = event.assistantMessageEvent.delta
                         if (delta) {
+                            hasDelta = true
                             sendSSEEvent(res, 'message', {content: delta})
+                        }
+                        return
+                    }
+
+                    // 部分模型/适配器可能不发 text_delta，只在 message_end 给完整文本
+                    if (event.type === 'message_end' && event.message.role === 'assistant' && !hasDelta) {
+                        const fallbackText = extractAssistantText(event.message)
+                        if (fallbackText.trim()) {
+                            sendSSEEvent(res, 'message', { content: fallbackText })
                         }
                     }
                 },
@@ -136,10 +228,12 @@ router.post('/chat', async (req, res, next) => {
             res.end()
         } else {
             const result = await runMainAgent({
-                messages: agentMessages,
+                messages: promptMessages,
+                contextMessages,
                 model: piModel,
                 apiKey,
                 temperature: options?.temperature,
+                extraSystemPrompt,
                 autoRunTodos: mode !== 'simple',
             })
 

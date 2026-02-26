@@ -1,0 +1,74 @@
+import type { AgentMessage } from '@mariozechner/pi-agent-core'
+import { getMemoryConfig } from '../core/memory/index.js'
+import { appendDailyMemoryEntry } from './store.js'
+import { logger } from '../utils/logger.js'
+
+let turnCounter = 0
+
+// 记忆写入模板约束：固定结构，便于后续检索和人工审阅。
+const MEMORY_ENTRY_TEMPLATE = {
+  reason: 'flushTurns threshold reached',
+  sections: ['User Summary', 'Assistant Summary', 'Candidate Durable Facts'],
+}
+
+function extractText(msg: AgentMessage | undefined): string {
+  if (!msg) return ''
+  const content = msg.content as unknown
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (part && typeof part === 'object' && 'text' in part) {
+          const text = (part as { text?: unknown }).text
+          return typeof text === 'string' ? text : ''
+        }
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+  return ''
+}
+
+function buildFlushEntry(messages: AgentMessage[]): string {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+
+  const userText = extractText(lastUser).trim()
+  const assistantText = extractText(lastAssistant).trim()
+
+  if (!userText && !assistantText) return ''
+
+  return [
+    `- Reason: ${MEMORY_ENTRY_TEMPLATE.reason}`,
+    '',
+    `### ${MEMORY_ENTRY_TEMPLATE.sections[0]}`,
+    userText || '(empty)',
+    '',
+    `### ${MEMORY_ENTRY_TEMPLATE.sections[1]}`,
+    assistantText || '(empty)',
+    '',
+    `### ${MEMORY_ENTRY_TEMPLATE.sections[2]}`,
+    '- (由后续检索/总结流程提炼长期事实)',
+  ].join('\n')
+}
+
+export async function recordMemoryTurnAndMaybeFlush(messages: AgentMessage[]): Promise<void> {
+  turnCounter += 1
+  const cfg = await getMemoryConfig()
+  if (turnCounter < cfg.flushTurns) {
+    return
+  }
+
+  turnCounter = 0
+  const entry = buildFlushEntry(messages)
+  if (!entry) return
+
+  await appendDailyMemoryEntry(entry)
+  logger.info('memory flush 已执行（按轮次阈值）')
+}
+
+export function resetMemoryTurnCounter(): void {
+  turnCounter = 0
+}

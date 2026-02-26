@@ -17,6 +17,17 @@ interface ModelPresetItem {
     apiKey: string
 }
 
+interface MemoryConfig {
+    flushTurns: number
+    embeddingBaseUrl: string
+}
+
+interface MemoryFileMeta {
+    name: string
+    size: number
+    updatedAt: string
+}
+
 /**
  * SettingsDrawer 的 Props
  *
@@ -34,6 +45,7 @@ interface SettingsDrawerProps {
 
 const MODEL_PRESET_STORAGE_KEY = 'webclaw.modelPresets'
 const ACTIVE_MODEL_PRESET_STORAGE_KEY = 'webclaw.activeModelPresetId'
+const API_BASE = 'http://localhost:5000/api/v1'
 
 function loadModelPresetsFromStorage(): ModelPresetItem[] {
     try {
@@ -82,6 +94,7 @@ export function SettingsDrawer({
     const [isMaxTokensOpen, setIsMaxTokensOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isModelPanelOpen, setIsModelPanelOpen] = useState(false)
+    const [isMemoryPanelOpen, setIsMemoryPanelOpen] = useState(false)
     const [selectedPromptId, setSelectedPromptId] = useState<string>(activePromptId ?? NEW_PROMPT_VALUE)
     const [draftTitle, setDraftTitle] = useState('')
     const [draftPrompt, setDraftPrompt] = useState('')
@@ -95,6 +108,12 @@ export function SettingsDrawer({
     const [draftBaseUrl, setDraftBaseUrl] = useState('')
     const [draftApiKey, setDraftApiKey] = useState('')
     const [modelSaveStatus, setModelSaveStatus] = useState<'Saved' | 'Editing'>('Saved')
+    const [memoryConfig, setMemoryConfig] = useState<MemoryConfig>({ flushTurns: 20, embeddingBaseUrl: '' })
+    const [memoryDraftConfig, setMemoryDraftConfig] = useState<MemoryConfig>({ flushTurns: 20, embeddingBaseUrl: '' })
+    const [memoryFiles, setMemoryFiles] = useState<MemoryFileMeta[]>([])
+    const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null)
+    const [selectedMemoryContent, setSelectedMemoryContent] = useState('')
+    const [memorySaveStatus, setMemorySaveStatus] = useState<'Saved' | 'Editing'>('Saved')
 
     const updateModelConfig = (partial: Partial<ModelConfig>) => {
         onModelConfigChange({ ...modelConfig, ...partial })
@@ -176,6 +195,25 @@ export function SettingsDrawer({
         }
         setModelSaveStatus('Saved')
     }, [isModelPanelOpen, modelPresets, selectedModelPresetId])
+
+    useEffect(() => {
+        if (!isMemoryPanelOpen) return
+        void (async () => {
+            const [configRes, filesRes] = await Promise.all([
+                fetch(`${API_BASE}/memory/config`),
+                fetch(`${API_BASE}/memory/files`),
+            ])
+            const configJson = await configRes.json() as { data?: MemoryConfig }
+            const filesJson = await filesRes.json() as { data?: { files?: MemoryFileMeta[] } }
+            const cfg = configJson?.data ?? { flushTurns: 20, embeddingBaseUrl: '' }
+            setMemoryConfig(cfg)
+            setMemoryDraftConfig(cfg)
+            setMemoryFiles(filesJson?.data?.files ?? [])
+            setSelectedMemoryFile(null)
+            setSelectedMemoryContent('')
+            setMemorySaveStatus('Saved')
+        })()
+    }, [isMemoryPanelOpen])
 
     useEffect(() => {
         if (!isSystemPanelOpen || saveStatus !== 'Editing') return
@@ -288,6 +326,25 @@ export function SettingsDrawer({
         selectedModelPresetId,
     ])
 
+    useEffect(() => {
+        if (!isMemoryPanelOpen || memorySaveStatus !== 'Editing') return
+
+        const timer = window.setTimeout(async () => {
+            const response = await fetch(`${API_BASE}/memory/config`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(memoryDraftConfig),
+            })
+            const json = await response.json() as { data?: MemoryConfig }
+            const next = json?.data ?? memoryDraftConfig
+            setMemoryConfig(next)
+            setMemoryDraftConfig(next)
+            setMemorySaveStatus('Saved')
+        }, 250)
+
+        return () => window.clearTimeout(timer)
+    }, [isMemoryPanelOpen, memoryDraftConfig, memorySaveStatus])
+
     const handlePromptSelection = (value: string) => {
         setSelectedPromptId(value)
         if (value === NEW_PROMPT_VALUE) {
@@ -362,6 +419,13 @@ export function SettingsDrawer({
         setModelSaveStatus('Saved')
     }
 
+    const handleOpenMemoryFile = async (name: string) => {
+        const response = await fetch(`${API_BASE}/memory/file?name=${encodeURIComponent(name)}`)
+        const json = await response.json() as { data?: { content?: string } }
+        setSelectedMemoryFile(name)
+        setSelectedMemoryContent(json?.data?.content ?? '')
+    }
+
     return (
         <div
             className={clsx(
@@ -431,6 +495,17 @@ export function SettingsDrawer({
                         <span className="block text-sm font-semibold text-gray-900">System instructions</span>
                         <span className="mt-1 block text-xs text-gray-500">
                             {activePrompt?.title || 'Optional tone and style instructions for the model'}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsMemoryPanelOpen(true)}
+                        className="memory-settings-card w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
+                    >
+                        <span className="block text-sm font-semibold text-gray-900">Memory settings</span>
+                        <span className="mt-1 block text-xs text-gray-500">
+                            Flush turns: {memoryConfig.flushTurns} · Embedding base URL configurable
                         </span>
                     </button>
                 </div>
@@ -524,6 +599,97 @@ export function SettingsDrawer({
                         </div>
                     </div>
                 </div>
+
+                {isMemoryPanelOpen && (
+                    <div className="absolute inset-0 z-20 flex flex-col bg-surface-alt px-6 py-4">
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                            <span className="text-base font-semibold text-text-primary">Memory settings</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsMemoryPanelOpen(false)}
+                                aria-label="关闭记忆面板"
+                                className="flex size-8 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
+                            >
+                                <X className="size-4" />
+                            </button>
+                        </div>
+
+                        {selectedMemoryFile ? (
+                            <div className="mt-4 flex min-h-0 flex-1 flex-col">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedMemoryFile(null)
+                                            setSelectedMemoryContent('')
+                                        }}
+                                        className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
+                                    >
+                                        返回列表
+                                    </button>
+                                    <span className="text-xs text-text-muted">{selectedMemoryFile}</span>
+                                </div>
+                                <pre className="min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-surface p-3 text-xs text-text-primary">
+                                    {selectedMemoryContent || '(empty)'}
+                                </pre>
+                            </div>
+                        ) : (
+                            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
+                                <div className="space-y-2">
+                                    <label className="block text-xs text-text-secondary">Embedding base URL</label>
+                                    <input
+                                        value={memoryDraftConfig.embeddingBaseUrl}
+                                        onChange={(e) => {
+                                            setMemoryDraftConfig((prev) => ({ ...prev, embeddingBaseUrl: e.target.value }))
+                                            setMemorySaveStatus('Editing')
+                                        }}
+                                        placeholder="http://127.0.0.1:8000/v1"
+                                        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-xs text-text-secondary">Flush turns</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={memoryDraftConfig.flushTurns}
+                                        onChange={(e) => {
+                                            setMemoryDraftConfig((prev) => ({ ...prev, flushTurns: Number(e.target.value || 20) }))
+                                            setMemorySaveStatus('Editing')
+                                        }}
+                                        className="w-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                    />
+                                </div>
+
+                                <div className="pt-2">
+                                    <div className="mb-2 text-xs text-text-secondary">
+                                        Memory files (read-only) · {memoryFiles.length}
+                                    </div>
+                                    <div className="max-h-52 space-y-2 overflow-auto rounded-xl border border-border bg-surface p-2">
+                                        {memoryFiles.map((file) => (
+                                            <button
+                                                key={file.name}
+                                                type="button"
+                                                onClick={() => void handleOpenMemoryFile(file.name)}
+                                                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
+                                            >
+                                                <span className="truncate">{file.name}</span>
+                                                <span className="ml-2 shrink-0 text-[11px] text-text-muted">
+                                                    {new Date(file.updatedAt).toLocaleDateString()}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mt-auto text-xs text-text-muted">
+                                    {memorySaveStatus === 'Editing' ? 'Saving...' : 'Saved'} · 文件内容只读
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {isModelPanelOpen && (
                     <div className="absolute inset-0 z-20 flex flex-col bg-surface-alt px-6 py-4">

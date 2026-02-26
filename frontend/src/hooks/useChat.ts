@@ -152,14 +152,26 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
 
   const buildMessages = useCallback(
     (text: string) => {
-      const result: Array<{ role: 'system' | 'user'; content: string }> = []
+      const result: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = []
       if (systemPrompt.trim()) {
         result.push({ role: 'system', content: systemPrompt.trim() })
       }
+      const history = messages
+        .filter(
+          (m) =>
+            (m.role === 'user' || m.role === 'assistant') &&
+            m.content.trim().length > 0,
+        )
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        })) as Array<{ role: 'user' | 'assistant'; content: string }>
+
+      result.push(...history)
       result.push({ role: 'user', content: text })
       return result
     },
-    [systemPrompt],
+    [messages, systemPrompt],
   )
 
   const sendSimple = useCallback(async (text: string) => {
@@ -239,7 +251,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
         }
       }
     }
-  }, [buildMessages, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature, updateMessageContent])
+  }, [buildMessages, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature, updateMessageContent])
 
   const sendThinking = useCallback(
     (text: string) => {
@@ -283,7 +295,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
         pendingSendRef.current = payload
       }
     },
-    [buildMessages, ensureWebSocket, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
+    [buildMessages, ensureWebSocket, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
   )
 
   const send = useCallback(
