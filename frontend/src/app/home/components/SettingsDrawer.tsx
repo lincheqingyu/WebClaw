@@ -2,6 +2,7 @@ import { ChevronDown, Trash2, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useEffect, useState } from 'react'
 import type { ModelConfig } from '../../../hooks/useChat'
+import { API_V1 } from '../../../config/api.ts'
 
 interface SystemPromptItem {
     id: string
@@ -45,7 +46,6 @@ interface SettingsDrawerProps {
 
 const MODEL_PRESET_STORAGE_KEY = 'webclaw.modelPresets'
 const ACTIVE_MODEL_PRESET_STORAGE_KEY = 'webclaw.activeModelPresetId'
-const API_BASE = 'http://localhost:5000/api/v1'
 
 function loadModelPresetsFromStorage(): ModelPresetItem[] {
     try {
@@ -200,8 +200,8 @@ export function SettingsDrawer({
         if (!isMemoryPanelOpen) return
         void (async () => {
             const [configRes, filesRes] = await Promise.all([
-                fetch(`${API_BASE}/memory/config`),
-                fetch(`${API_BASE}/memory/files`),
+                fetch(`${API_V1}/memory/config`),
+                fetch(`${API_V1}/memory/files`),
             ])
             const configJson = await configRes.json() as { data?: MemoryConfig }
             const filesJson = await filesRes.json() as { data?: { files?: MemoryFileMeta[] } }
@@ -330,7 +330,7 @@ export function SettingsDrawer({
         if (!isMemoryPanelOpen || memorySaveStatus !== 'Editing') return
 
         const timer = window.setTimeout(async () => {
-            const response = await fetch(`${API_BASE}/memory/config`, {
+            const response = await fetch(`${API_V1}/memory/config`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(memoryDraftConfig),
@@ -420,7 +420,7 @@ export function SettingsDrawer({
     }
 
     const handleOpenMemoryFile = async (name: string) => {
-        const response = await fetch(`${API_BASE}/memory/file?name=${encodeURIComponent(name)}`)
+        const response = await fetch(`${API_V1}/memory/file?name=${encodeURIComponent(name)}`)
         const json = await response.json() as { data?: { content?: string } }
         setSelectedMemoryFile(name)
         setSelectedMemoryContent(json?.data?.content ?? '')

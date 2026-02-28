@@ -33,6 +33,15 @@ const envSchema = z.object({
 
   /** 日志级别 */
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  /** 达梦数据库连接字符串（可选，扩展工具 execute_sql） */
+  DM_CONNECT_STRING: z.string().optional(),
+
+  /** 档案 API 基础地址（可选，扩展工具 get_ai_archive_data） */
+  ARCHIVE_API_BASE_URL: z.string().url().optional(),
+
+  /** 档案 API 认证 Token（可选） */
+  ARCHIVE_API_TOKEN: z.string().optional(),
 })
 
 /** 校验后的环境变量类型 */

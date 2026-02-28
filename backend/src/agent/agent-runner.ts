@@ -12,6 +12,12 @@ import { runPendingTodosWithModel } from './sub-agent-runner.js'
 import { createTracker, MAX_ITERATIONS, MAX_TOOL_FAILURES } from './types.js'
 import { logger } from '../utils/logger.js'
 import { ensureMemoryFiles, loadMemoryInjectionText, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
+import { createTodoManager, type TodoManager } from '../core/todo/todo-manager.js'
+
+/** 记忆轮次计数状态（会话级） */
+export interface TurnState {
+  counter: number
+}
 
 /** 主 Agent 运行参数 */
 export interface MainAgentOptions {
@@ -24,6 +30,8 @@ export interface MainAgentOptions {
   onEvent?: (event: AgentEvent) => void
   contextMessages?: AgentMessage[]
   autoRunTodos?: boolean
+  todoManager?: TodoManager
+  turnState?: TurnState
 }
 
 /** 主 Agent 运行结果 */
@@ -46,6 +54,8 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     onEvent,
     contextMessages = [],
     autoRunTodos = true,
+    todoManager,
+    turnState,
   } = options
 
   await ensureMemoryFiles()
@@ -56,7 +66,8 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
     .filter((part): part is string => Boolean(part && part.length > 0))
     .join('\n\n')
 
-  const tools = createAgentTools()
+  const effectiveTodoManager = todoManager ?? createTodoManager()
+  const tools = createAgentTools(effectiveTodoManager)
   const tracker = createTracker()
 
   const abortController = new AbortController()
@@ -124,7 +135,7 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
           const result = event.result as { details?: { hasPending?: boolean } }
           if (result?.details?.hasPending) {
             try {
-              for await (const [idx, item, subResult] of runPendingTodosWithModel(model, apiKey)) {
+              for await (const [idx, item, subResult] of runPendingTodosWithModel(model, apiKey, effectiveTodoManager)) {
                 logger.info(`Todo #${idx} (${item.content.slice(0, 30)}) 完成`)
                 logger.debug(`子 Agent 结果: ${subResult.slice(0, 200)}`)
               }
@@ -145,6 +156,6 @@ export async function runMainAgent(options: MainAgentOptions): Promise<MainAgent
   }
 
   const mergedMessages = [...contextMessages, ...allMessages]
-  await recordMemoryTurnAndMaybeFlush(mergedMessages)
+  await recordMemoryTurnAndMaybeFlush(mergedMessages, turnState)
   return { messages: mergedMessages }
 }

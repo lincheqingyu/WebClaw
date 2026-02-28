@@ -15,6 +15,7 @@ import {initSSE, sendSSEEvent} from '../utils/stream.js'
 import {createHttpError} from '../middlewares/error-handler.js'
 import {logger} from '../utils/logger.js'
 import {chatRequestSchema} from '../types/api.js'
+import {createTodoManager} from '../core/todo/todo-manager.js'
 
 const router: RouterType = Router()
 const MAX_CONTEXT_MESSAGES = 40
@@ -35,6 +36,18 @@ function extractAssistantText(message: AgentMessage): string {
         })
         .filter(Boolean)
         .join('\n')
+}
+
+/** 提取 tool 执行结果的文本摘要（截取前 200 字符） */
+function summarizeToolResult(result: unknown): string {
+    if (!result || typeof result !== 'object') return String(result ?? '')
+    const r = result as { content?: unknown }
+    if (!Array.isArray(r.content)) return JSON.stringify(result).slice(0, 200)
+    const texts = r.content
+        .filter((c: unknown) => c && typeof c === 'object' && (c as { type?: string }).type === 'text')
+        .map((c: unknown) => ((c as { text?: string }).text ?? ''))
+        .join('\n')
+    return texts.slice(0, 200) || JSON.stringify(result).slice(0, 200)
 }
 
 
@@ -149,7 +162,7 @@ router.post('/chat', async (req, res, next) => {
                 stream: isStream,
                 model: modelId,
                 baseUrl,
-                apiKey: reqApiKey,
+                apiKey: reqApiKey ? `${reqApiKey.slice(0, 6)}****` : undefined,
                 options,
             },
         }
@@ -161,20 +174,24 @@ router.post('/chat', async (req, res, next) => {
         })
         const apiKey = reqApiKey ?? config.LLM_API_KEY
 
+        if (mode === 'thinking') {
+            throw createHttpError(400, 'HTTP 接口仅支持 simple 模式，thinking 模式请使用 WebSocket /api/v1/chat/ws')
+        }
+
         const { promptMessages, contextMessages, extraSystemPrompt } = normalizeIncomingMessages(messages, piModel.id)
         if (promptMessages.length === 0) {
             throw createHttpError(400, '至少需要一条 user 消息')
         }
 
         requestContext.resolved = {
-            apiKey,
+            apiKey: apiKey ? `${apiKey.slice(0, 6)}****` : '[not set]',
             modelId: piModel.id,
             baseUrl: piModel.baseUrl,
             maxTokens: piModel.maxTokens,
         }
 
         logger.debug('chat 模型配置:', {
-            apiKey,
+            apiKey: apiKey ? `${apiKey.slice(0, 6)}****` : '[not set]',
             apiUrl: piModel.baseUrl,
             modelName: piModel.id,
             maxTokens: piModel.maxTokens,
@@ -183,6 +200,8 @@ router.post('/chat', async (req, res, next) => {
             mode,
             messages,
         })
+
+        const requestTodoManager = createTodoManager()
 
         if (isStream) {
             initSSE(res)
@@ -197,11 +216,9 @@ router.post('/chat', async (req, res, next) => {
                 extraSystemPrompt,
                 signal: req.socket.destroyed ? AbortSignal.abort() : undefined,
                 autoRunTodos: mode !== 'simple',
+                todoManager: requestTodoManager,
                 onEvent: (event) => {
-                    // 输出模型流式返回的完整事件，便于定位流式中断/无内容问题
-                    logger.debug('chat stream event:', event)
-
-                    // 流式推送 text_delta
+                    // 1. 流式推送 text_delta（已有）
                     if (
                         event.type === 'message_update' &&
                         event.assistantMessageEvent.type === 'text_delta'
@@ -214,11 +231,53 @@ router.post('/chat', async (req, res, next) => {
                         return
                     }
 
-                    // 部分模型/适配器可能不发 text_delta，只在 message_end 给完整文本
-                    if (event.type === 'message_end' && event.message.role === 'assistant' && !hasDelta) {
-                        const fallbackText = extractAssistantText(event.message)
-                        if (fallbackText.trim()) {
-                            sendSSEEvent(res, 'message', { content: fallbackText })
+                    // 2. tool 调用参数完成 → 日志
+                    if (
+                        event.type === 'message_update' &&
+                        event.assistantMessageEvent.type === 'toolcall_end'
+                    ) {
+                        const tc = (event.assistantMessageEvent as { toolCall?: { name?: string; arguments?: unknown } }).toolCall
+                        if (tc) {
+                            logger.info(`[tool call] ${tc.name}(${JSON.stringify(tc.arguments).slice(0, 300)})`)
+                        }
+                        return
+                    }
+
+                    // 3. tool 执行开始 → 日志 + SSE
+                    if (event.type === 'tool_execution_start') {
+                        const ev = event as { toolName?: string; args?: unknown }
+                        logger.info(`[tool exec] 开始执行 ${ev.toolName}`)
+                        sendSSEEvent(res, 'tool_start', {
+                            toolName: ev.toolName,
+                            args: ev.args,
+                        })
+                        return
+                    }
+
+                    // 4. tool 执行结束 → 日志 + SSE
+                    if (event.type === 'tool_execution_end') {
+                        const ev = event as { toolName?: string; isError?: boolean; result?: unknown }
+                        const summary = summarizeToolResult(ev.result)
+                        logger.info(`[tool exec] ${ev.toolName} 完成 (isError=${ev.isError}), 结果: ${summary}`)
+                        sendSSEEvent(res, 'tool_end', {
+                            toolName: ev.toolName,
+                            isError: ev.isError,
+                            summary,
+                        })
+                        return
+                    }
+
+                    // 5. message_end → 日志 + fallback
+                    if (event.type === 'message_end') {
+                        const msg = event.message
+                        if (msg.role === 'assistant') {
+                            logger.info(`[message_end] stopReason=${(msg as { stopReason?: string }).stopReason}`)
+                        }
+                        if (msg.role === 'assistant' && !hasDelta) {
+                            const fallbackText = extractAssistantText(msg)
+                            if (fallbackText.trim()) {
+                                sendSSEEvent(res, 'message', { content: fallbackText })
+                            }
                         }
                     }
                 },
@@ -235,6 +294,7 @@ router.post('/chat', async (req, res, next) => {
                 temperature: options?.temperature,
                 extraSystemPrompt,
                 autoRunTodos: mode !== 'simple',
+                todoManager: requestTodoManager,
             })
 
             // 提取最后一条 assistant 消息的文本

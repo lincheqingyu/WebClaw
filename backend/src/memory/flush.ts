@@ -2,6 +2,7 @@ import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import { getMemoryConfig } from '../core/memory/index.js'
 import { appendDailyMemoryEntry } from './store.js'
 import { logger } from '../utils/logger.js'
+import type { TurnState } from '../agent/agent-runner.js'
 
 let turnCounter = 0
 
@@ -54,14 +55,27 @@ function buildFlushEntry(messages: AgentMessage[]): string {
   ].join('\n')
 }
 
-export async function recordMemoryTurnAndMaybeFlush(messages: AgentMessage[]): Promise<void> {
-  turnCounter += 1
+export async function recordMemoryTurnAndMaybeFlush(
+  messages: AgentMessage[],
+  turnState?: TurnState,
+): Promise<void> {
+  // 优先使用会话级计数器，无则回退到模块级（兼容旧调用方）
+  if (turnState) {
+    turnState.counter += 1
+  } else {
+    turnCounter += 1
+  }
+  const currentCount = turnState ? turnState.counter : turnCounter
   const cfg = await getMemoryConfig()
-  if (turnCounter < cfg.flushTurns) {
+  if (currentCount < cfg.flushTurns) {
     return
   }
 
-  turnCounter = 0
+  if (turnState) {
+    turnState.counter = 0
+  } else {
+    turnCounter = 0
+  }
   const entry = buildFlushEntry(messages)
   if (!entry) return
 

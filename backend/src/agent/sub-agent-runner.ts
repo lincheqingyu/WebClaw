@@ -7,7 +7,7 @@ import type { Model, Message } from '@mariozechner/pi-ai'
 import { agentLoop, type AgentMessage } from '@mariozechner/pi-agent-core'
 import { AGENT_TYPES } from '../core/agent/agent-config.js'
 import { buildSubAgentPrompt } from '../core/prompts/system-prompts.js'
-import { TODO, type TodoItem } from '../core/todo/todo-manager.js'
+import type { TodoItem, TodoManager } from '../core/todo/todo-manager.js'
 import { createSubAgentTools } from './tools/index.js'
 import {
   createTracker,
@@ -116,13 +116,14 @@ export async function runSubAgent(params: SubAgentParams): Promise<string> {
 export async function* runPendingTodosWithModel(
   model: Model<'openai-completions'>,
   apiKey: string,
+  todoManager: TodoManager,
 ): AsyncGenerator<[number, TodoItem, string]> {
   while (true) {
-    const pending = TODO.getPending()
+    const pending = todoManager.getPending()
     if (pending === null) break
 
     const [idx, item] = pending
-    TODO.markInProgress(idx)
+    todoManager.markInProgress(idx)
 
     try {
       const result = await runSubAgent({
@@ -132,10 +133,10 @@ export async function* runPendingTodosWithModel(
         model,
         apiKey,
       })
-      TODO.markCompleted(idx)
+      todoManager.markCompleted(idx)
       yield [idx, item, result]
     } catch (error) {
-      TODO.markCompleted(idx)
+      todoManager.markCompleted(idx)
       yield [idx, item, `执行失败: ${error instanceof Error ? error.message : String(error)}`]
     }
   }

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { API_BASE, WS_BASE } from '../config/api.ts'
+import { getSessionId } from '../lib/session.ts'
+import { ReconnectableWs, type ConnectionStatus } from '../lib/ws-reconnect.ts'
 
 export type ChatMode = 'simple' | 'thinking'
 
@@ -25,9 +28,6 @@ interface UseChatOptions {
   modelConfig: ModelConfig
 }
 
-const API_BASE = 'http://localhost:5000'
-const WS_BASE = 'ws://localhost:5000'
-
 function createId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
@@ -39,13 +39,89 @@ function appendMessage(
   setMessages((prev) => [...prev, msg])
 }
 
+/** 处理 WS 消息的纯函数 */
+function handleWsEvent(
+  payload: Record<string, unknown>,
+  lastAssistantIdRef: { current: string | null },
+  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+  updateContent: (id: string, delta: string) => void,
+  setIsStreaming: Dispatch<SetStateAction<boolean>>,
+  setIsWaiting: Dispatch<SetStateAction<boolean>>,
+): void {
+  const eventType = payload.event as string
+
+  if (eventType === 'message_delta') {
+    const last = lastAssistantIdRef.current
+    if (last) {
+      updateContent(last, (payload.content as string) ?? '')
+    }
+    return
+  }
+
+  if (eventType === 'message_end') {
+    setIsStreaming(false)
+    return
+  }
+
+  if (eventType === 'need_user_input' || eventType === 'waiting') {
+    setIsWaiting(true)
+    return
+  }
+
+  if (eventType === 'done') {
+    setIsStreaming(false)
+    setIsWaiting(false)
+    return
+  }
+
+  if (eventType === 'session_restored') {
+    appendMessage(setMessages, {
+      id: createId('system'),
+      role: 'system',
+      content: `会话已恢复 (${payload.messageCount ?? 0} 条上下文)`,
+      timestamp: Date.now(),
+      eventType: 'session_restored',
+    })
+    return
+  }
+
+  if (eventType === 'error') {
+    appendMessage(setMessages, {
+      id: createId('system'),
+      role: 'system',
+      content: (payload.message as string) ?? '发生错误',
+      timestamp: Date.now(),
+    })
+    setIsStreaming(false)
+    setIsWaiting(false)
+    return
+  }
+
+  // 其他事件（todo_write, subagent_start 等）
+  const content =
+    (payload.content as string) ??
+    (payload.result as string) ??
+    (payload.prompt as string) ??
+    JSON.stringify(payload, null, 2)
+
+  appendMessage(setMessages, {
+    id: createId('event'),
+    role: 'event',
+    content,
+    timestamp: Date.now(),
+    eventType,
+  })
+}
+
 export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
   const [mode, setMode] = useState<ChatMode>('simple')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [isWaiting, setIsWaiting] = useState(false)
-  const wsRef = useRef<WebSocket | null>(null)
-  const pendingSendRef = useRef<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
+
+  const reconnectWsRef = useRef<ReconnectableWs | null>(null)
+  const lastAssistantIdRef = useRef<string | null>(null)
 
   const updateMessageContent = useCallback((id: string, delta: string) => {
     setMessages((prev) =>
@@ -53,102 +129,51 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
     )
   }, [])
 
-  const ensureWebSocket = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return wsRef.current
+  /** 获取或创建 ReconnectableWs */
+  const ensureWs = useCallback(() => {
+    if (reconnectWsRef.current) return reconnectWsRef.current
 
-    const ws = new WebSocket(`${WS_BASE}/api/v1/chat/ws`)
-    wsRef.current = ws
+    const sessionId = getSessionId()
+    const url = `${WS_BASE}/api/v1/chat/ws?sessionId=${sessionId}`
 
-    ws.onopen = () => {
-      if (pendingSendRef.current) {
-        ws.send(pendingSendRef.current)
-        pendingSendRef.current = null
-      }
-    }
-
-    ws.onclose = () => {
-      wsRef.current = null
-    }
-
-    ws.onerror = () => {
-      appendMessage(setMessages, {
-        id: createId('system'),
-        role: 'system',
-        content: 'WebSocket 连接失败',
-        timestamp: Date.now(),
-      })
-      wsRef.current = null
-    }
-
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data as string)
-        const eventType = payload.event as string
-
-        if (eventType === 'message_delta') {
-          const last = messagesRef.current.lastAssistantId
-          if (last) {
-            updateMessageContent(last, payload.content ?? '')
-          }
-          return
-        }
-
-        if (eventType === 'message_end') {
-          setIsStreaming(false)
-          return
-        }
-
-        if (eventType === 'need_user_input' || eventType === 'waiting') {
-          setIsWaiting(true)
-        }
-
-        if (eventType === 'done') {
-          setIsStreaming(false)
-          setIsWaiting(false)
-          return
-        }
-
-        if (eventType === 'error') {
+    const rws = new ReconnectableWs({
+      url,
+      onMessage: (data) => {
+        try {
+          const payload = JSON.parse(data) as Record<string, unknown>
+          handleWsEvent(
+            payload,
+            lastAssistantIdRef,
+            setMessages,
+            updateMessageContent,
+            setIsStreaming,
+            setIsWaiting,
+          )
+        } catch {
           appendMessage(setMessages, {
             id: createId('system'),
             role: 'system',
-            content: payload.message ?? '发生错误',
+            content: '无法解析 WS 消息',
             timestamp: Date.now(),
           })
-          setIsStreaming(false)
-          setIsWaiting(false)
-          return
         }
+      },
+      onStatusChange: (status) => {
+        setConnectionStatus(status)
+        if (status === 'disconnected') {
+          appendMessage(setMessages, {
+            id: createId('system'),
+            role: 'system',
+            content: 'WebSocket 连接已断开',
+            timestamp: Date.now(),
+          })
+        }
+      },
+    })
 
-        const content =
-          payload.content ??
-          payload.result ??
-          payload.prompt ??
-          JSON.stringify(payload, null, 2)
-
-        appendMessage(setMessages, {
-          id: createId('event'),
-          role: 'event',
-          content,
-          timestamp: Date.now(),
-          eventType,
-        })
-      } catch {
-        appendMessage(setMessages, {
-          id: createId('system'),
-          role: 'system',
-          content: '无法解析 WS 消息',
-          timestamp: Date.now(),
-        })
-      }
-    }
-
-    return ws
-  }, [updateMessageContent])
-
-  const messagesRef = useRef<{ lastAssistantId: string | null }>({
-    lastAssistantId: null,
-  })
+    reconnectWsRef.current = rws
+    return rws
+  }, [updateMessageContent, setMessages, setIsStreaming, setIsWaiting, setConnectionStatus])
 
   const buildMessages = useCallback(
     (text: string) => {
@@ -184,7 +209,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
     })
 
     const assistantId = createId('assistant')
-    messagesRef.current.lastAssistantId = assistantId
+    lastAssistantIdRef.current = assistantId
     appendMessage(setMessages, {
       id: assistantId,
       role: 'assistant',
@@ -264,7 +289,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
       })
 
       const assistantId = createId('assistant')
-      messagesRef.current.lastAssistantId = assistantId
+      lastAssistantIdRef.current = assistantId
       appendMessage(setMessages, {
         id: assistantId,
         role: 'assistant',
@@ -288,14 +313,10 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
         messages: buildMessages(text),
       })
 
-      const ws = ensureWebSocket()
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(payload)
-      } else {
-        pendingSendRef.current = payload
-      }
+      const rws = ensureWs()
+      rws.send(payload)
     },
-    [buildMessages, ensureWebSocket, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
+    [buildMessages, ensureWs, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
   )
 
   const send = useCallback(
@@ -310,12 +331,21 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
     [mode, sendSimple, sendThinking],
   )
 
+  // 切换到 simple 模式时关闭 WS
   useEffect(() => {
-    if (mode === 'simple' && wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
+    if (mode === 'simple' && reconnectWsRef.current) {
+      reconnectWsRef.current.close()
+      reconnectWsRef.current = null
     }
   }, [mode])
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      reconnectWsRef.current?.close()
+      reconnectWsRef.current = null
+    }
+  }, [])
 
   return {
     mode,
@@ -324,5 +354,6 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
     send,
     isStreaming,
     isWaiting,
+    connectionStatus,
   }
 }

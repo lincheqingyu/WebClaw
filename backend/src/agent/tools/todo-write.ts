@@ -4,7 +4,7 @@
 
 import { Type } from '@sinclair/typebox'
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core'
-import { TODO } from '../../core/todo/todo-manager.js'
+import type { TodoManager } from '../../core/todo/todo-manager.js'
 
 /** todo_write 工具的 details 类型 */
 export interface TodoWriteDetails {
@@ -12,7 +12,7 @@ export interface TodoWriteDetails {
 }
 
 /** 创建 todo_write 工具 */
-export function createTodoWriteTool(): AgentTool<typeof parameters, TodoWriteDetails> {
+export function createTodoWriteTool(todoManager: TodoManager): AgentTool<typeof parameters, TodoWriteDetails> {
   return {
     name: 'todo_write',
     label: '更新任务列表',
@@ -20,8 +20,8 @@ export function createTodoWriteTool(): AgentTool<typeof parameters, TodoWriteDet
     parameters,
     execute: async (_toolCallId, params): Promise<AgentToolResult<TodoWriteDetails>> => {
       try {
-        const rendered = TODO.update(params.items)
-        const hasPending = TODO.getPending() !== null
+        const rendered = todoManager.update(params.items)
+        const hasPending = todoManager.getPending() !== null
         return {
           content: [{ type: 'text', text: rendered }],
           details: { hasPending },

@@ -24,7 +24,11 @@
       "Bash(pnpm -F @webclaw/backend build:*)",
       "Bash(pnpm build:backend:*)",
       "Bash(cd /mnt/d/JingshengAI/AI/WebClaw/backend && npx tsc --noEmit 2>&1 | head -60)",
-      "Bash(npx tsc --noEmit 2>&1 | head -40)"
+      "Bash(npx tsc --noEmit 2>&1 | head -40)",
+      "Bash(find /mnt/d/JingshengAI/AI/WebClaw -path \"*/node_modules\" -prune -o -name \"*.env*\" -type f -print 2>/dev/null | head -20)",
+      "Bash(find /mnt/d/JingshengAI/AI/WebClaw/backend/node_modules/@mariozechner/pi-agent-core -type f \\\\\\( -name \"*.d.ts\" -o -name \"*.ts\" \\\\\\) 2>/dev/null | head -20)",
+      "Bash(npx tsc --noEmit -p backend/tsconfig.json 2>&1 | head -30)",
+      "WebFetch(domain:eco.dameng.com)"
     ]
   }
 }

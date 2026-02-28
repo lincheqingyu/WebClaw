@@ -19,7 +19,7 @@ export interface TodoItemInput {
 
 const MAX_ITEMS = 20
 
-class TodoManager {
+export class TodoManager {
   private items: TodoItem[] = []
 
   /** 更新任务列表，返回渲染后的文本 */
@@ -106,7 +106,19 @@ class TodoManager {
   allDone(): boolean {
     return this.items.every((item) => item.status === 'completed')
   }
+
+  /** 获取所有任务项（序列化用） */
+  getItems(): readonly TodoItem[] {
+    return this.items
+  }
+
+  /** 加载任务项（反序列化用） */
+  loadItems(items: TodoItem[]): void {
+    this.items = items.slice(0, MAX_ITEMS)
+  }
 }
 
-/** 全局单例 */
-export const TODO = new TodoManager()
+/** 创建会话级 TodoManager 实例 */
+export function createTodoManager(): TodoManager {
+  return new TodoManager()
+}
