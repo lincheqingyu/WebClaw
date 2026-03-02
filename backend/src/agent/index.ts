@@ -2,10 +2,11 @@
  * Agent 模块统一导出
  */
 
-export { runMainAgent, type MainAgentOptions, type MainAgentResult, type TurnState } from './agent-runner.js'
-export { runSubAgent, runPendingTodosWithModel, type SubAgentParams } from './sub-agent-runner.js'
+export { runSimpleAgent, type SimpleAgentOptions, type SimpleAgentResult, type TurnState } from './agent-runner.js'
+export { runManagerAgent, type ManagerAgentOptions, type ManagerAgentResult } from './manager-runner.js'
+export { runWorkerAgent, type WorkerAgentOptions, type WorkerAgentResult } from './worker-runner.js'
 export { createVllmModel, type VllmModelOptions } from './vllm-model.js'
-export { createAgentTools, createSubAgentTools } from './tools/index.js'
+export { createSimpleTools, createManagerTools, createWorkerTools } from './tools/index.js'
 export {
   MAX_ITERATIONS,
   MAX_TOOL_FAILURES,

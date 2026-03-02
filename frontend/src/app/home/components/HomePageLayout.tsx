@@ -38,7 +38,7 @@ function loadModelConfig(): ModelConfig {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.modelConfig)
         if (!raw) {
-            return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '' }
+            return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
         }
         const parsed = JSON.parse(raw)
         return {
@@ -47,9 +47,10 @@ function loadModelConfig(): ModelConfig {
             maxTokens: Number(parsed.maxTokens ?? 8192),
             baseUrl: parsed.baseUrl ?? '',
             apiKey: parsed.apiKey ?? '',
+            enableTools: Boolean(parsed.enableTools ?? false),
         }
     } catch {
-        return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '' }
+        return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
     }
 }
 

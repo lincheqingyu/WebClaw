@@ -20,12 +20,14 @@ export interface SerializedTodoItem {
   readonly content: string
   readonly status: 'pending' | 'in_progress' | 'completed'
   readonly activeForm: string
+  readonly result?: string
+  readonly errorMessage?: string
 }
 
 /** 会话快照（持久化用） */
 export interface SessionSnapshot {
   readonly sessionId: string
-  readonly mode: 'simple' | 'thinking'
+  readonly mode: 'simple' | 'plan'
   readonly contextMessages: Array<{
     role: string
     content: string

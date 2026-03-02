@@ -8,6 +8,8 @@ export interface TodoItem {
   readonly content: string
   readonly status: 'pending' | 'in_progress' | 'completed'
   readonly activeForm: string
+  readonly result?: string
+  readonly errorMessage?: string
 }
 
 /** 任务更新输入 */
@@ -15,6 +17,8 @@ export interface TodoItemInput {
   content?: string
   status?: string
   activeForm?: string
+  result?: string
+  errorMessage?: string
 }
 
 const MAX_ITEMS = 20
@@ -50,6 +54,8 @@ export class TodoManager {
         content,
         status: status as TodoItem['status'],
         activeForm,
+        result: typeof raw.result === 'string' ? raw.result : undefined,
+        errorMessage: typeof raw.errorMessage === 'string' ? raw.errorMessage : undefined,
       })
     }
 
@@ -88,6 +94,16 @@ export class TodoManager {
     return null
   }
 
+  /** 返回第一个 in_progress item 的 [index, item]，无则返回 null */
+  getInProgress(): [number, TodoItem] | null {
+    for (let i = 0; i < this.items.length; i++) {
+      if (this.items[i].status === 'in_progress') {
+        return [i, this.items[i]]
+      }
+    }
+    return null
+  }
+
   /** 标记指定索引的任务为 in_progress */
   markInProgress(index: number): void {
     this.items = this.items.map((item, i) =>
@@ -96,9 +112,16 @@ export class TodoManager {
   }
 
   /** 标记指定索引的任务为 completed */
-  markCompleted(index: number): void {
+  markCompleted(index: number, result?: string, errorMessage?: string): void {
     this.items = this.items.map((item, i) =>
-      i === index ? { ...item, status: 'completed' as const } : item
+      i === index
+        ? {
+            ...item,
+            status: 'completed' as const,
+            result: result ?? item.result,
+            errorMessage: errorMessage ?? item.errorMessage,
+          }
+        : item
     )
   }
 

@@ -134,9 +134,20 @@
 **Skill 在对话流程中的调用**
 - 主/子 agent 的系统提示词要求：匹配任务时**先调用 `skill` 工具**。
 - 工具集：
-  - 主 agent：`bash`, `read_file`, `skill`, `todo_write`
-  - 子 agent：`bash`, `read_file`, `skill`
+  - 主 agent：`bash`, `read_file`, `skill`, `todo_write` + 扩展工具（见 `backend/src/extensions/index.ts`）
+  - 子 agent：`bash`, `read_file`, `skill` + 扩展工具（无 `todo_write`）
 - `direct_return` 目前只在 `SkillLoader.isDirectReturn()` 中读取，未在主流程中强制执行（可作为后续扩展点）。
+
+**Agent 默认工具来源与扩展**
+- 工具注册入口：`backend/src/agent/tools/index.ts`
+- 主 agent 默认工具（`createAgentTools()`）：
+  - 核心：`bash`, `read_file`, `skill`, `todo_write`
+  - 扩展：`createExtensionTools()` 追加扩展工具
+- 子 agent 默认工具（`createSubAgentTools()`）：
+  - 核心：`bash`, `read_file`, `skill`
+  - 扩展：`createExtensionTools()` 追加扩展工具（与主 agent 相同）
+- 扩展工具清单与加载机制：`backend/src/extensions/index.ts`
+  - 当前内置扩展：`execute_sql`、`get_ai_archive_data`（加载失败会被忽略并记录日志）
 
 ## 5. 开发参考文档
 
@@ -157,4 +168,3 @@
 - WS 仅使用 `user` 作为 prompt，`contextMessages` 由会话累积。
 - `todo_write` 产物会写入全局 `TODO`，当前未做会话级隔离。
 - HTTP 同步响应未返回 `provider` / `usage`，与文档示例不一致（若需要请扩展响应结构）。
-

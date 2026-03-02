@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { API_BASE, WS_BASE } from '../config/api.ts'
+import { WS_BASE } from '../config/api.ts'
 import { getSessionId } from '../lib/session.ts'
 import { ReconnectableWs, type ConnectionStatus } from '../lib/ws-reconnect.ts'
 
-export type ChatMode = 'simple' | 'thinking'
+export type ChatMode = 'simple' | 'plan'
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'event'
 
@@ -21,6 +21,7 @@ export interface ModelConfig {
   maxTokens: number
   baseUrl: string
   apiKey: string
+  enableTools: boolean
 }
 
 interface UseChatOptions {
@@ -43,17 +44,27 @@ function appendMessage(
 function handleWsEvent(
   payload: Record<string, unknown>,
   lastAssistantIdRef: { current: string | null },
+  lastWorkerIdRef: { current: string | null },
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
   updateContent: (id: string, delta: string) => void,
   setIsStreaming: Dispatch<SetStateAction<boolean>>,
   setIsWaiting: Dispatch<SetStateAction<boolean>>,
 ): void {
   const eventType = payload.event as string
+  const eventPayload = (payload.payload as Record<string, unknown>) ?? {}
 
   if (eventType === 'message_delta') {
     const last = lastAssistantIdRef.current
     if (last) {
-      updateContent(last, (payload.content as string) ?? '')
+      updateContent(last, (eventPayload.content as string) ?? '')
+    }
+    return
+  }
+
+  if (eventType === 'worker_delta') {
+    const last = lastWorkerIdRef.current
+    if (last) {
+      updateContent(last, (eventPayload.content as string) ?? '')
     }
     return
   }
@@ -63,8 +74,15 @@ function handleWsEvent(
     return
   }
 
-  if (eventType === 'need_user_input' || eventType === 'waiting') {
+  if (eventType === 'need_user_input') {
     setIsWaiting(true)
+    appendMessage(setMessages, {
+      id: createId('event'),
+      role: 'event',
+      content: (eventPayload.prompt as string) ?? '需要补充信息',
+      timestamp: Date.now(),
+      eventType,
+    })
     return
   }
 
@@ -78,7 +96,7 @@ function handleWsEvent(
     appendMessage(setMessages, {
       id: createId('system'),
       role: 'system',
-      content: `会话已恢复 (${payload.messageCount ?? 0} 条上下文)`,
+      content: `会话已恢复 (${eventPayload.messageCount ?? 0} 条上下文)`,
       timestamp: Date.now(),
       eventType: 'session_restored',
     })
@@ -89,7 +107,7 @@ function handleWsEvent(
     appendMessage(setMessages, {
       id: createId('system'),
       role: 'system',
-      content: (payload.message as string) ?? '发生错误',
+      content: (eventPayload.message as string) ?? '发生错误',
       timestamp: Date.now(),
     })
     setIsStreaming(false)
@@ -97,12 +115,30 @@ function handleWsEvent(
     return
   }
 
+  if (eventType === 'worker_start') {
+    const id = createId('worker')
+    lastWorkerIdRef.current = id
+    const content = `Worker #${eventPayload.todoIndex ?? ''}: ${eventPayload.content ?? ''}`
+    appendMessage(setMessages, {
+      id,
+      role: 'event',
+      content,
+      timestamp: Date.now(),
+      eventType,
+    })
+    return
+  }
+
+  if (eventType === 'worker_end') {
+    lastWorkerIdRef.current = null
+  }
+
   // 其他事件（todo_write, subagent_start 等）
   const content =
-    (payload.content as string) ??
-    (payload.result as string) ??
-    (payload.prompt as string) ??
-    JSON.stringify(payload, null, 2)
+    (eventPayload.content as string) ??
+    (eventPayload.result as string) ??
+    (eventPayload.prompt as string) ??
+    JSON.stringify(eventPayload, null, 2)
 
   appendMessage(setMessages, {
     id: createId('event'),
@@ -122,6 +158,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
 
   const reconnectWsRef = useRef<ReconnectableWs | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
+  const lastWorkerIdRef = useRef<string | null>(null)
 
   const updateMessageContent = useCallback((id: string, delta: string) => {
     setMessages((prev) =>
@@ -144,6 +181,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
           handleWsEvent(
             payload,
             lastAssistantIdRef,
+            lastWorkerIdRef,
             setMessages,
             updateMessageContent,
             setIsStreaming,
@@ -199,86 +237,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
     [messages, systemPrompt],
   )
 
-  const sendSimple = useCallback(async (text: string) => {
-    const userId = createId('user')
-    appendMessage(setMessages, {
-      id: userId,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    })
-
-    const assistantId = createId('assistant')
-    lastAssistantIdRef.current = assistantId
-    appendMessage(setMessages, {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-    })
-
-    setIsStreaming(true)
-
-    const response = await fetch(`${API_BASE}/api/v1/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'simple',
-        stream: true,
-        model: modelConfig.model,
-        baseUrl: modelConfig.baseUrl,
-        apiKey: modelConfig.apiKey,
-        options: {
-          temperature: modelConfig.temperature,
-          maxTokens: modelConfig.maxTokens,
-        },
-        messages: buildMessages(text),
-      }),
-    })
-
-    if (!response.ok || !response.body) {
-      appendMessage(setMessages, {
-        id: createId('system'),
-        role: 'system',
-        content: '请求失败',
-        timestamp: Date.now(),
-      })
-      setIsStreaming(false)
-      return
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      const events = buffer.split('\n\n')
-      buffer = events.pop() ?? ''
-
-      for (const eventText of events) {
-        const lines = eventText.split('\n')
-        const eventType = lines
-          .find((l) => l.startsWith('event:'))
-          ?.slice(6)
-          .trim()
-        const dataLine = lines.find((l) => l.startsWith('data:'))
-        if (!dataLine) continue
-        const data = JSON.parse(dataLine.slice(5).trim())
-
-        if (eventType === 'message') {
-          updateMessageContent(assistantId, data.content ?? '')
-        } else if (eventType === 'done') {
-          setIsStreaming(false)
-        }
-      }
-    }
-  }, [buildMessages, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature, updateMessageContent])
-
-  const sendThinking = useCallback(
+  const sendWs = useCallback(
     (text: string) => {
       const userId = createId('user')
       appendMessage(setMessages, {
@@ -290,6 +249,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
 
       const assistantId = createId('assistant')
       lastAssistantIdRef.current = assistantId
+      lastWorkerIdRef.current = null
       appendMessage(setMessages, {
         id: assistantId,
         role: 'assistant',
@@ -301,43 +261,34 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
       setIsWaiting(false)
 
       const payload = JSON.stringify({
-        mode: 'thinking',
-        stream: true,
-        model: modelConfig.model,
-        baseUrl: modelConfig.baseUrl,
-        apiKey: modelConfig.apiKey,
-        options: {
-          temperature: modelConfig.temperature,
-          maxTokens: modelConfig.maxTokens,
+        event: 'chat',
+        payload: {
+          mode,
+          model: modelConfig.model,
+          baseUrl: modelConfig.baseUrl || undefined,
+          apiKey: modelConfig.apiKey || undefined,
+          enableTools: modelConfig.enableTools,
+          options: {
+            temperature: modelConfig.temperature,
+            maxTokens: modelConfig.maxTokens,
+          },
+          messages: buildMessages(text),
         },
-        messages: buildMessages(text),
       })
 
       const rws = ensureWs()
       rws.send(payload)
     },
-    [buildMessages, ensureWs, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
+    [buildMessages, ensureWs, mode, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.enableTools, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
   )
 
   const send = useCallback(
     (text: string) => {
       if (!text.trim()) return
-      if (mode === 'simple') {
-        void sendSimple(text)
-      } else {
-        sendThinking(text)
-      }
+      sendWs(text)
     },
-    [mode, sendSimple, sendThinking],
+    [sendWs],
   )
-
-  // 切换到 simple 模式时关闭 WS
-  useEffect(() => {
-    if (mode === 'simple' && reconnectWsRef.current) {
-      reconnectWsRef.current.close()
-      reconnectWsRef.current = null
-    }
-  }, [mode])
 
   // 组件卸载时清理
   useEffect(() => {

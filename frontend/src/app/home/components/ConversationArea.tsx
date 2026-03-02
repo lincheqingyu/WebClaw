@@ -91,7 +91,7 @@ export function ConversationArea({
               <div className="flex h-full flex-col items-center justify-center">
                 <div className="mb-8 text-center">
                   <div className="text-2xl font-semibold text-text-primary">有什么我可以帮你的？</div>
-                  <div className="mt-2 text-sm text-text-muted">支持 simple 与 thinking 两种模式</div>
+                  <div className="mt-2 text-sm text-text-muted">支持 simple 与 plan 两种模式</div>
                 </div>
                 <ChatInput
                   mode={mode}

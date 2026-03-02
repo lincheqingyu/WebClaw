@@ -40,7 +40,7 @@ export function ChatInput({ mode, onModeChange, onSend, showSuggestions = true }
   }
 
   const toggleThinking = () => {
-    onModeChange(mode === 'thinking' ? 'simple' : 'thinking')
+    onModeChange(mode === 'plan' ? 'simple' : 'plan')
   }
 
   const compact = !showSuggestions
@@ -80,14 +80,14 @@ export function ChatInput({ mode, onModeChange, onSend, showSuggestions = true }
           />
         </div>
 
-        {mode === 'thinking' && (
+        {mode === 'plan' && (
           <button
             type="button"
             onClick={() => onModeChange('simple')}
             className="absolute -top-3 left-4 rounded-full border border-border bg-surface px-2 py-1 text-xs text-text-secondary shadow-sm"
-            aria-label="关闭 thinking 模式"
+            aria-label="关闭 plan 模式"
           >
-            thinking
+            plan
           </button>
         )}
       </div>

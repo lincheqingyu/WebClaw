@@ -8,7 +8,6 @@ import cors from 'cors'
 import { requestLogger } from './middlewares/request-logger.js'
 import { errorHandler } from './middlewares/error-handler.js'
 import { healthRouter } from './controllers/health.js'
-import { chatRouter } from './controllers/chat.js'
 import { modelsRouter } from './controllers/models.js'
 import { memoryRouter } from './controllers/memory.js'
 
@@ -22,7 +21,6 @@ export function createApp(): express.Express {
 
   // 路由
   app.use(healthRouter)
-  app.use('/api/v1', chatRouter)
   app.use('/api/v1', modelsRouter)
   app.use('/api/v1', memoryRouter)
 

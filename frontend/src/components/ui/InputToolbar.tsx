@@ -5,9 +5,9 @@ interface InputToolbarProps {
   /** 输入框是否有内容（控制发送按钮状态） */
   hasContent: boolean
   /** 当前模式 */
-  mode: 'simple' | 'thinking'
+  mode: 'simple' | 'plan'
   /** 切换模式 */
-  onModeChange: (mode: 'simple' | 'thinking') => void
+  onModeChange: (mode: 'simple' | 'plan') => void
   /** 点击附件/加号按钮 */
   onPlusClick: () => void
   /** 点击发送按钮 */
@@ -46,14 +46,14 @@ export function InputToolbar({
           <Plus className="size-4" />
         </button>
 
-        {mode === 'thinking' && (
+        {mode === 'plan' && (
           <button
             type="button"
             onClick={() => onModeChange('simple')}
             className="rounded-full border border-border bg-surface px-2 py-1 text-xs text-text-secondary"
-            aria-label="关闭 thinking 模式"
+            aria-label="关闭 plan 模式"
           >
-            thinking
+            plan
           </button>
         )}
       </div>

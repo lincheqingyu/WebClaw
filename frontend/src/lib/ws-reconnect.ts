@@ -94,7 +94,7 @@ export class ReconnectableWs {
       try {
         const parsed = JSON.parse(data) as { event?: string }
         if (parsed.event === 'ping') {
-          this.ws?.send(JSON.stringify({ event: 'pong', timestamp: Date.now() }))
+          this.ws?.send(JSON.stringify({ event: 'pong', payload: { timestamp: Date.now() } }))
           return
         }
       } catch {

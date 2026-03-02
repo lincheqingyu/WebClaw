@@ -8,7 +8,7 @@ interface AutoResizeTextareaProps {
   onChange: (value: string) => void
   /** 发送回调（按 Enter 时触发） */
   onSend: () => void
-  /** 切换 thinking 模式 */
+  /** 切换 plan 模式 */
   onToggleThinking: () => void
   /** 占位文字 */
   placeholder?: string

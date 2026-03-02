@@ -3,36 +3,40 @@
  * 前后端共享，确保事件名和 payload 类型一致
  */
 
+import type { SerializedTodoItem } from './session.js'
+
 /** 服务端 → 客户端 事件类型 */
 export type ServerEventType =
   | 'message_delta'
   | 'message_end'
-  | 'todo_write'
-  | 'subagent_start'
-  | 'subagent_result'
-  | 'subagent_error'
+  | 'tool_start'
+  | 'tool_end'
+  | 'plan_created'
+  | 'worker_start'
+  | 'worker_delta'
+  | 'worker_end'
   | 'todo_update'
   | 'need_user_input'
-  | 'waiting'
   | 'done'
   | 'error'
   | 'ping'
   | 'session_restored'
 
 /** 客户端 → 服务端 事件类型 */
-export type ClientEventType = 'chat' | 'pong'
+export type ClientEventType = 'chat' | 'cancel' | 'pong'
 
 /** 服务端事件 payload 映射 */
 export interface ServerEventPayloadMap {
   message_delta: { content: string }
   message_end: Record<string, never>
-  todo_write: { content: string }
-  subagent_start: { todoIndex: number; content: string }
-  subagent_result: { todoIndex: number; result: string }
-  subagent_error: { todoIndex: number; error: string }
-  todo_update: { todoIndex: number; status: string; summary: string }
+  tool_start: { toolName: string; args?: unknown }
+  tool_end: { toolName: string; isError?: boolean; summary: string }
+  plan_created: { todos: SerializedTodoItem[] }
+  worker_start: { todoIndex: number; content: string; activeForm: string }
+  worker_delta: { todoIndex: number; content: string }
+  worker_end: { todoIndex: number; result: string; isError: boolean }
+  todo_update: { todos: SerializedTodoItem[] }
   need_user_input: { prompt: string }
-  waiting: Record<string, never>
   done: Record<string, never>
   error: { message: string }
   ping: { timestamp: number }
@@ -41,7 +45,16 @@ export interface ServerEventPayloadMap {
 
 /** 客户端事件 payload 映射 */
 export interface ClientEventPayloadMap {
-  chat: { messages: Array<{ role: string; content: string }>; [key: string]: unknown }
+  chat: {
+    mode: 'simple' | 'plan'
+    messages: Array<{ role: string; content: string }>
+    model?: string
+    baseUrl?: string
+    apiKey?: string
+    enableTools?: boolean
+    options?: { temperature?: number; maxTokens?: number }
+  }
+  cancel: Record<string, never>
   pong: { timestamp: number }
 }
 

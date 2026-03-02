@@ -569,6 +569,29 @@ export function SettingsDrawer({
 
                 <div className="my-6 h-px w-full bg-border" role="separator" aria-orientation="horizontal"/>
 
+                {/* Function Calling 开关 */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-semibold text-text-primary">Function Calling</h3>
+                        <p className="text-xs text-text-secondary mt-0.5">启用后模型可调用工具</p>
+                    </div>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={modelConfig.enableTools}
+                        onClick={() => updateModelConfig({enableTools: !modelConfig.enableTools})}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            modelConfig.enableTools ? 'bg-accent' : 'bg-gray-300'
+                        }`}
+                    >
+                        <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                            modelConfig.enableTools ? 'translate-x-6' : 'translate-x-1'
+                        }`}/>
+                    </button>
+                </div>
+
+                <div className="my-6 h-px w-full bg-border" role="separator" aria-orientation="horizontal"/>
+
                 <div className="settings-item-column settings-item-spacer">
                     <div className="item-about item-about-slider">
                         <div className="item-description">
@@ -654,37 +677,6 @@ export function SettingsDrawer({
                                     })}
                                 </div>
                             )}
-                        </div>
-                    </div>
-
-                    {/* Function calling 纯样式区域 */}
-                    <div className="settings-item settings-tool flex items-center justify-between mt-6 pt-6 border-t border-gray-100">
-                        <div className="item-about item-about-no-icon pr-4">
-                            <div className="item-description">
-                                <h3 className="item-description-title text-sm font-semibold text-text-primary">Function calling</h3>
-                            </div>
-                        </div>
-
-                        <div className="item-input-toggle flex items-center gap-3">
-                            {/* 静态 Toggle 开关 (关闭状态) */}
-                            <button
-                                role="switch"
-                                type="button"
-                                aria-label="Function calling"
-                                aria-checked="false"
-                                className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-gray-200 transition-colors duration-200 ease-in-out hover:opacity-90 focus:outline-none"
-                            >
-                                <span
-                                    className="pointer-events-none relative inline-block h-5 w-5 translate-x-0 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out">
-                                    {/* 关闭状态图标 (减号) */}
-                                    <span
-                                        className="absolute inset-0 flex h-full w-full items-center justify-center opacity-100 transition-opacity duration-200 ease-in">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-3 w-3 text-gray-400 fill-current">
-                                            <path d="M20 13H4v-2h16v2z"></path>
-                                        </svg>
-                                    </span>
-                                </span>
-                            </button>
                         </div>
                     </div>
                 </div>

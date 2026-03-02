@@ -31,11 +31,11 @@ export const chatRequestSchema = z.object({
           }),
       )
       .min(1, '至少需要一条消息'),
-  mode: z.enum(['simple', 'thinking']).default('simple'),
-  stream: z.boolean().optional(),
+  mode: z.enum(['simple', 'plan']).default('simple'),
   model: z.string().optional(),
   baseUrl: z.string().url().optional(),
   apiKey: z.string().optional(),
+  enableTools: z.boolean().default(false),
   options: z
       .object({
         temperature: z.number().min(0).max(2).optional(),

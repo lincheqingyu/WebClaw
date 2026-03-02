@@ -7,7 +7,7 @@ import type { UserMessage, AssistantMessage } from '@mariozechner/pi-ai'
 import type { SessionId, SessionSnapshot, SerializedTodoItem } from '@webclaw/shared'
 import { createTodoManager, type TodoManager, type TodoItem } from '../core/todo/todo-manager.js'
 
-export type Mode = 'simple' | 'thinking'
+export type Mode = 'simple' | 'plan'
 
 /** 会话状态 */
 export interface SessionState {
@@ -22,6 +22,8 @@ export interface SessionState {
   isRunning: boolean
   isWaiting: boolean
   resumeHint?: string
+  waitingTodoIndex?: number
+  abortController?: AbortController
   todoManager: TodoManager
   memoryTurnCounter: number
   lastActiveAt: number
@@ -33,7 +35,7 @@ export function createSessionState(sessionId: SessionId): SessionState {
   const now = Date.now()
   return {
     sessionId,
-    mode: 'thinking',
+    mode: 'simple',
     contextMessages: [],
     isRunning: false,
     isWaiting: false,
@@ -58,6 +60,8 @@ export function serializeSessionState(state: SessionState): SessionSnapshot {
       content: item.content,
       status: item.status,
       activeForm: item.activeForm,
+      result: item.result,
+      errorMessage: item.errorMessage,
     })),
     memoryTurnCounter: state.memoryTurnCounter,
     createdAt: state.createdAt,
@@ -72,6 +76,8 @@ export function restoreSessionState(snapshot: SessionSnapshot): SessionState {
     content: item.content,
     status: item.status,
     activeForm: item.activeForm,
+    result: item.result,
+    errorMessage: item.errorMessage,
   }))
   todoManager.loadItems(todoItems)
 
@@ -101,7 +107,7 @@ export function restoreSessionState(snapshot: SessionSnapshot): SessionState {
 
   return {
     sessionId: snapshot.sessionId as SessionId,
-    mode: snapshot.mode ?? 'thinking',
+    mode: snapshot.mode ?? 'simple',
     contextMessages,
     isRunning: false,
     isWaiting: false,
