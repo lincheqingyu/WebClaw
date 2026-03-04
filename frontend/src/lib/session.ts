@@ -1,44 +1,56 @@
 /**
- * 会话 ID 管理
- * 使用 localStorage 持久化，支持页面刷新后恢复
- * 隐身模式或 localStorage 不可用时回退到内存级 ID
+ * 前端会话身份（peerId）管理
+ * 说明：
+ * - 后端 Session V2 由 route 解析会话键，不再依赖 URL sessionId。
+ * - 前端持久化一个稳定的 peerId，用于 dm 场景的 route.peerId。
  */
 
-const SESSION_ID_KEY = 'webclaw.sessionId'
+const PEER_ID_KEY = 'webclaw.peerId'
+const LEGACY_SESSION_ID_KEY = 'webclaw.sessionId'
 
-/** 内存回退：localStorage 不可用时使用 */
-let memorySessionId: string | null = null
+let memoryPeerId: string | null = null
 
-/** 生成随机会话 ID */
-function generateSessionId(): string {
-  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+function generatePeerId(): string {
+  return `peer_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-/** 获取当前会话 ID（不存在则创建） */
-export function getSessionId(): string {
+export function getPeerId(): string {
   try {
-    const existing = localStorage.getItem(SESSION_ID_KEY)
+    const existing = localStorage.getItem(PEER_ID_KEY)
     if (existing) return existing
 
-    const id = generateSessionId()
-    localStorage.setItem(SESSION_ID_KEY, id)
+    // 一次性迁移旧键
+    const legacy = localStorage.getItem(LEGACY_SESSION_ID_KEY)
+    if (legacy) {
+      localStorage.setItem(PEER_ID_KEY, legacy)
+      return legacy
+    }
+
+    const id = generatePeerId()
+    localStorage.setItem(PEER_ID_KEY, id)
     return id
   } catch {
-    // localStorage 不可用（隐身模式等），回退内存
-    if (memorySessionId) return memorySessionId
-    memorySessionId = generateSessionId()
-    return memorySessionId
+    if (memoryPeerId) return memoryPeerId
+    memoryPeerId = generatePeerId()
+    return memoryPeerId
   }
 }
 
-/** 重置会话 ID（新对话时调用） */
-export function resetSessionId(): string {
-  const id = generateSessionId()
+export function resetPeerId(): string {
+  const id = generatePeerId()
   try {
-    localStorage.setItem(SESSION_ID_KEY, id)
+    localStorage.setItem(PEER_ID_KEY, id)
   } catch {
-    // localStorage 不可用，回退内存
-    memorySessionId = id
+    memoryPeerId = id
   }
   return id
+}
+
+// 兼容旧调用方（后续可移除）
+export function getSessionId(): string {
+  return getPeerId()
+}
+
+export function resetSessionId(): string {
+  return resetPeerId()
 }

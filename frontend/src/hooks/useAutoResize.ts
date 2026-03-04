@@ -9,7 +9,11 @@ import { useCallback, useEffect, useRef } from 'react'
  * @param value - 当前文本内容
  * @param maxRows - 最大可见行数（默认 8）
  */
-export function useAutoResize(value: string, maxRows = 8) {
+export function useAutoResize(
+  value: string,
+  maxRows = 8,
+  onLayoutChange?: (state: { multiline: boolean; overflowing: boolean }) => void,
+) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const resize = useCallback(() => {
@@ -22,12 +26,23 @@ export function useAutoResize(value: string, maxRows = 8) {
 
     // 先收缩到一行，再用 scrollHeight 算出实际内容高度
     el.style.height = 'auto'
+    const style = getComputedStyle(el)
+    const paddingTop = parseFloat(style.paddingTop) || 0
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    const singleLineHeight = lineHeight + paddingTop + paddingBottom
+
     const scrollHeight = el.scrollHeight
     const nextHeight = Math.min(scrollHeight, maxHeight)
 
     el.style.height = `${nextHeight}px`
-    el.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden'
-  }, [maxRows])
+    const overflowing = scrollHeight > maxHeight
+    el.style.overflowY = overflowing ? 'auto' : 'hidden'
+
+    if (onLayoutChange) {
+      const multiline = value.trim().length > 0 && scrollHeight > singleLineHeight + 1
+      onLayoutChange({ multiline, overflowing })
+    }
+  }, [maxRows, onLayoutChange, value])
 
   useEffect(() => {
     resize()

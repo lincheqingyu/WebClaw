@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ConversationArea } from './ConversationArea'
 import { SettingsDrawer } from './SettingsDrawer'
+import {
+  ConversationSidebar,
+  type ConversationItem,
+} from './ConversationSidebar'
 import type { ModelConfig } from '../../../hooks/useChat'
 
 interface SystemPromptItem {
@@ -10,48 +14,120 @@ interface SystemPromptItem {
 }
 
 const STORAGE_KEYS = {
-    prompts: 'webclaw.systemPrompts',
-    activePromptId: 'webclaw.activePromptId',
-    modelConfig: 'webclaw.modelConfig',
+  prompts: 'webclaw.systemPrompts',
+  activePromptId: 'webclaw.activePromptId',
+  modelConfig: 'webclaw.modelConfig',
+  conversations: 'webclaw.conversations',
+  activeConversationId: 'webclaw.activeConversationId',
+  sidebarCollapsed: 'webclaw.sidebarCollapsed',
 }
 
 function loadPrompts(): SystemPromptItem[] {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEYS.prompts)
-        if (!raw) return []
-        const parsed = JSON.parse(raw)
-        return Array.isArray(parsed) ? parsed : []
-    } catch {
-        return []
-    }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.prompts)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 function loadActivePromptId(): string | null {
-    try {
-        return localStorage.getItem(STORAGE_KEYS.activePromptId)
-    } catch {
-        return null
-    }
+  try {
+    return localStorage.getItem(STORAGE_KEYS.activePromptId)
+  } catch {
+    return null
+  }
 }
 
 function loadModelConfig(): ModelConfig {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEYS.modelConfig)
-        if (!raw) {
-            return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
-        }
-        const parsed = JSON.parse(raw)
-        return {
-            model: parsed.model ?? 'glm-4.7',
-            temperature: Number(parsed.temperature ?? 0.7),
-            maxTokens: Number(parsed.maxTokens ?? 8192),
-            baseUrl: parsed.baseUrl ?? '',
-            apiKey: parsed.apiKey ?? '',
-            enableTools: Boolean(parsed.enableTools ?? false),
-        }
-    } catch {
-        return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.modelConfig)
+    if (!raw) {
+      return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
     }
+    const parsed = JSON.parse(raw)
+    return {
+      model: parsed.model ?? 'glm-4.7',
+      temperature: Number(parsed.temperature ?? 0.7),
+      maxTokens: Number(parsed.maxTokens ?? 8192),
+      baseUrl: parsed.baseUrl ?? '',
+      apiKey: parsed.apiKey ?? '',
+      enableTools: Boolean(parsed.enableTools ?? false),
+    }
+  } catch {
+    return { model: 'glm-4.7', temperature: 0.7, maxTokens: 8192, baseUrl: '', apiKey: '', enableTools: false }
+  }
+}
+
+function createPeerId() {
+  return `peer_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createConversation(title = '新会话'): ConversationItem {
+  const now = Date.now()
+  return {
+    id: `conv_${now}_${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    preview: '开始一段新的对话',
+    peerId: createPeerId(),
+    updatedAt: now,
+  }
+}
+
+function loadConversations(): ConversationItem[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.conversations)
+    if (!raw) return [createConversation()]
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return [createConversation()]
+    }
+
+    const normalized = parsed
+      .filter((item: unknown) => typeof item === 'object' && item !== null)
+      .map((item) => {
+        const candidate = item as Partial<ConversationItem>
+        return {
+          id: candidate.id || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          title: candidate.title?.trim() || '新会话',
+          preview: candidate.preview?.trim() || '开始一段新的对话',
+          peerId: candidate.peerId?.trim() || createPeerId(),
+          updatedAt: Number(candidate.updatedAt) || Date.now(),
+        }
+      })
+
+    return normalized.length > 0 ? normalized : [createConversation()]
+  } catch {
+    return [createConversation()]
+  }
+}
+
+function loadActiveConversationId(): string {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.activeConversationId)
+    return raw ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.sidebarCollapsed)
+    if (raw === null) return true
+    return raw === '1'
+  } catch {
+    return true
+  }
+}
+
+function deriveTitleFromMessage(content: string): string {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  if (!normalized) return '新会话'
+  const snippet = normalized.slice(0, 18)
+  return normalized.length > 18 ? `${snippet}...` : snippet
 }
 
 /**
@@ -63,102 +139,168 @@ function loadModelConfig(): ModelConfig {
  * 3. 用 Flexbox 横向排列：对话区域 | 设置抽屉
  */
 export function HomePageLayout() {
-    // ---------- 状态管理 ----------
+  const [conversations, setConversations] = useState<ConversationItem[]>(() => loadConversations())
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => loadActiveConversationId())
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed())
 
-    // 控制设置抽屉是否展开
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // ---------- 状态管理 ----------
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isDark, setIsDark] = useState(false)
+  const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>(() => loadPrompts())
+  const [activePromptId, setActivePromptId] = useState<string | null>(() => loadActivePromptId())
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(() => loadModelConfig())
 
-    // 控制亮/暗色主题
-    // useState<boolean> ← TypeScript 会自动推断类型，这里不需要手动标注
-    const [isDark, setIsDark] = useState(false)
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDark])
 
-    const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>(() => loadPrompts())
-    const [activePromptId, setActivePromptId] = useState<string | null>(() => loadActivePromptId())
-    const [modelConfig, setModelConfig] = useState<ModelConfig>(() => loadModelConfig())
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.prompts, JSON.stringify(systemPrompts))
+  }, [systemPrompts])
 
-    // ---------- 副作用：同步主题到 <html> 标签 ----------
+  useEffect(() => {
+    if (activePromptId) {
+      localStorage.setItem(STORAGE_KEYS.activePromptId, activePromptId)
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.activePromptId)
+    }
+  }, [activePromptId])
 
-    /**
-     * useEffect 是 React 的"副作用钩子"（Effect Hook）
-     *
-     * 为什么需要它？
-     * → 暗色模式需要给 <html> 加上 class="dark"
-     * → 直接操作 DOM 属于"副作用"，必须放在 useEffect 里
-     * → 依赖数组 [isDark] 表示：只在 isDark 变化时执行
-     */
-    useEffect(() => {
-        // document.documentElement 就是 <html> 元素
-        if (isDark) {
-            document.documentElement.classList.add('dark')
-        } else {
-            document.documentElement.classList.remove('dark')
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.modelConfig, JSON.stringify(modelConfig))
+  }, [modelConfig])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.conversations, JSON.stringify(conversations))
+  }, [conversations])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.activeConversationId, activeConversationId)
+  }, [activeConversationId])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, isSidebarCollapsed ? '1' : '0')
+  }, [isSidebarCollapsed])
+
+  useEffect(() => {
+    if (conversations.length === 0) {
+      const initial = createConversation()
+      setConversations([initial])
+      setActiveConversationId(initial.id)
+      return
+    }
+    const exists = conversations.some((item) => item.id === activeConversationId)
+    if (!exists) {
+      setActiveConversationId(conversations[0].id)
+    }
+  }, [activeConversationId, conversations])
+
+  const activePrompt = useMemo(() => {
+    return systemPrompts.find((p) => p.id === activePromptId) ?? null
+  }, [systemPrompts, activePromptId])
+
+  const activeConversation = useMemo(() => {
+    return conversations.find((item) => item.id === activeConversationId) ?? conversations[0]
+  }, [conversations, activeConversationId])
+
+  const handleSettingsToggle = () => {
+    setIsSettingsOpen((prev) => !prev)
+  }
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false)
+  }
+
+  const handleThemeToggle = () => {
+    setIsDark((prev) => !prev)
+  }
+
+  const handleCreateConversation = () => {
+    const next = createConversation()
+    setConversations((prev) => [next, ...prev])
+    setActiveConversationId(next.id)
+  }
+
+  const handleSelectConversation = (conversationId: string) => {
+    setActiveConversationId(conversationId)
+  }
+
+  const handleDeleteConversation = (conversationId: string) => {
+    const filtered = conversations.filter((item) => item.id !== conversationId)
+    if (filtered.length === 0) {
+      const created = createConversation()
+      setConversations([created])
+      setActiveConversationId(created.id)
+      return
+    }
+    setConversations(filtered)
+    if (activeConversationId === conversationId) {
+      setActiveConversationId(filtered[0].id)
+    }
+  }
+
+  const handleConversationActivity = (content: string) => {
+    if (!activeConversation) return
+    const title = deriveTitleFromMessage(content)
+    const preview = content.replace(/\s+/g, ' ').trim().slice(0, 40)
+    setConversations((prev) => {
+      const updated = prev.map((item) => {
+        if (item.id !== activeConversation.id) return item
+        return {
+          ...item,
+          title: item.title === '新会话' ? title : item.title,
+          preview: preview || item.preview,
+          updatedAt: Date.now(),
         }
-    }, [isDark])
+      })
+      return updated.sort((a, b) => b.updatedAt - a.updatedAt)
+    })
+  }
 
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.prompts, JSON.stringify(systemPrompts))
-    }, [systemPrompts])
+  if (!activeConversation) return null
 
-    useEffect(() => {
-        if (activePromptId) {
-            localStorage.setItem(STORAGE_KEYS.activePromptId, activePromptId)
-        } else {
-            localStorage.removeItem(STORAGE_KEYS.activePromptId)
-        }
-    }, [activePromptId])
-
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.modelConfig, JSON.stringify(modelConfig))
-    }, [modelConfig])
-
-    const activePrompt = useMemo(() => {
-        return systemPrompts.find((p) => p.id === activePromptId) ?? null
-    }, [systemPrompts, activePromptId])
-
-    // ---------- 事件处理函数 ----------
-
-    const handleSettingsToggle = () => {
-        setIsSettingsOpen((prev) => !prev)
-    }
-
-    const handleSettingsClose = () => {
-        setIsSettingsOpen(false)
-    }
-
-    const handleThemeToggle = () => {
-        setIsDark((prev) => !prev)
-    }
-
-    // ---------- 渲染 ----------
-
-    return (
-        <div
-            className={[
-                // 布局：弹性盒子，铺满屏幕，禁止溢出
-                "flex h-screen w-screen overflow-hidden",
-                // 外观：使用语义化主题色（亮/暗模式自动切换）
-                "bg-surface-alt text-text-primary font-sans",
-                // 过渡：切换主题时颜色平滑过渡
-                "transition-colors duration-300",
-            ].join(" ")}
-        >
-            <ConversationArea
-                onSettingsToggle={handleSettingsToggle}
-                isDark={isDark}
-                onThemeToggle={handleThemeToggle}
-                systemPrompt={activePrompt?.prompt ?? ''}
-                modelConfig={modelConfig}
-            />
-            <SettingsDrawer
-                isOpen={isSettingsOpen}
-                onClose={handleSettingsClose}
-                systemPrompts={systemPrompts}
-                activePromptId={activePromptId}
-                onSystemPromptsChange={setSystemPrompts}
-                onActivePromptChange={setActivePromptId}
-                modelConfig={modelConfig}
-                onModelConfigChange={setModelConfig}
-            />
-        </div>
-    )
+  return (
+    <div
+      className={[
+        'flex h-screen w-screen overflow-hidden',
+        'bg-surface-alt text-text-primary font-sans',
+        'transition-colors duration-300',
+      ].join(' ')}
+    >
+      <ConversationSidebar
+        conversations={conversations}
+        activeConversationId={activeConversation.id}
+        collapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        onCreateConversation={handleCreateConversation}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
+      />
+      <ConversationArea
+        key={activeConversation.id}
+        onSettingsToggle={handleSettingsToggle}
+        isDark={isDark}
+        onThemeToggle={handleThemeToggle}
+        systemPrompt={activePrompt?.prompt ?? ''}
+        modelConfig={modelConfig}
+        conversationTitle={activeConversation.title}
+        peerId={activeConversation.peerId}
+        onConversationActivity={handleConversationActivity}
+      />
+      <SettingsDrawer
+        isOpen={isSettingsOpen}
+        onClose={handleSettingsClose}
+        systemPrompts={systemPrompts}
+        activePromptId={activePromptId}
+        onSystemPromptsChange={setSystemPrompts}
+        onActivePromptChange={setActivePromptId}
+        modelConfig={modelConfig}
+        onModelConfigChange={setModelConfig}
+      />
+    </div>
+  )
 }

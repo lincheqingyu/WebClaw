@@ -13,6 +13,13 @@ export type {
 
 export type {
   SessionId,
+  SessionKey,
+  SessionKind,
+  SessionChannel,
+  SessionOrigin,
+  SessionStats,
+  SessionEntry,
+  SessionRouteContext,
   SerializedTodoItem,
   SessionSnapshot,
   WsConnectParams,

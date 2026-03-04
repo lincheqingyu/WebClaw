@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AutoResizeTextarea } from './AutoResizeTextarea'
 import { CategoryTags } from './CategoryTags'
 import type { ChatMode } from '../../hooks/useChat'
@@ -20,12 +20,14 @@ interface ChatInputProps {
  */
 export function ChatInput({ mode, onModeChange, onSend, showSuggestions = true }: ChatInputProps) {
   const [message, setMessage] = useState('')
+  const [isMultiline, setIsMultiline] = useState(false)
 
   /** 发送消息（暂时为空操作，后续接入） */
   const handleSend = () => {
     if (!message.trim()) return
     onSend(message)
     setMessage('')
+    setIsMultiline(false)
   }
 
   /** 点击加号按钮（暂时为空操作，后续接入） */
@@ -45,40 +47,76 @@ export function ChatInput({ mode, onModeChange, onSend, showSuggestions = true }
 
   const compact = !showSuggestions
 
+  useEffect(() => {
+    if (!message) {
+      setIsMultiline(false)
+    }
+  }, [message])
+
   return (
     <div className="mx-auto w-full max-w-3xl">
       <div
         className={clsx(
           'relative border border-border bg-surface',
-          compact ? 'rounded-full' : 'rounded-[20px]',
+          isMultiline ? 'rounded-[20px]' : compact ? 'rounded-full' : 'rounded-[20px]',
           'shadow-[var(--shadow-input)]',
           'transition-shadow duration-200',
           'hover:shadow-[var(--shadow-input-hover)]',
           'focus-within:shadow-[var(--shadow-input-hover)]',
         )}
       >
-        <div className={clsx('flex items-center gap-2', compact ? 'px-4 py-2' : 'px-3 py-3')}>
-          <button
-            type="button"
-            onClick={handlePlusClick}
-            className={clsx(
-              'flex shrink-0 items-center justify-center',
-              'size-8 rounded-full border border-border',
-              'text-text-secondary transition-colors hover:bg-hover hover:text-text-primary',
-            )}
-            aria-label="添加附件"
-          >
-            <Plus className="size-4" />
-          </button>
+        {!isMultiline ? (
+          <div className={clsx('flex items-center gap-2', compact ? 'px-4 py-2' : 'px-3 py-3')}>
+            <button
+              type="button"
+              onClick={handlePlusClick}
+              className={clsx(
+                'flex shrink-0 items-center justify-center',
+                'size-8 rounded-full',
+                'text-text-secondary transition-colors hover:bg-hover hover:text-text-primary',
+              )}
+              aria-label="添加附件"
+            >
+              <Plus className="size-4" />
+            </button>
 
-          <AutoResizeTextarea
-            value={message}
-            onChange={setMessage}
-            onSend={handleSend}
-            onToggleThinking={toggleThinking}
-            className={clsx('px-1 py-1', compact ? 'max-h-10 min-h-8' : 'max-h-40 min-h-8')}
-          />
-        </div>
+            <AutoResizeTextarea
+              value={message}
+              onChange={setMessage}
+              onSend={handleSend}
+              onToggleThinking={toggleThinking}
+              maxRows={10}
+              onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
+              className={clsx('px-1 py-1', 'max-h-[15rem] min-h-8')}
+            />
+          </div>
+        ) : (
+          <div className={clsx('px-3 pt-3 pb-2')}>
+            <AutoResizeTextarea
+              value={message}
+              onChange={setMessage}
+              onSend={handleSend}
+              onToggleThinking={toggleThinking}
+              maxRows={10}
+              onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
+              className={clsx('px-1 py-0', 'max-h-[15rem] min-h-8')}
+            />
+            <div className="mt-1 flex h-8 items-center px-1">
+              <button
+                type="button"
+                onClick={handlePlusClick}
+                className={clsx(
+                  'flex shrink-0 items-center justify-center',
+                  'size-7 rounded-md',
+                  'text-text-secondary transition-colors hover:bg-hover hover:text-text-primary',
+                )}
+                aria-label="添加附件"
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {mode === 'plan' && (
           <button

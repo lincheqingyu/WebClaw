@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { WS_BASE } from '../config/api.ts'
-import { getSessionId } from '../lib/session.ts'
+import { getPeerId } from '../lib/session.ts'
+import { buildDefaultRoute } from '../lib/session-route.ts'
 import { ReconnectableWs, type ConnectionStatus } from '../lib/ws-reconnect.ts'
 
 export type ChatMode = 'simple' | 'plan'
@@ -27,6 +28,7 @@ export interface ModelConfig {
 interface UseChatOptions {
   systemPrompt: string
   modelConfig: ModelConfig
+  peerId?: string
 }
 
 function createId(prefix: string) {
@@ -93,12 +95,22 @@ function handleWsEvent(
   }
 
   if (eventType === 'session_restored') {
+    // 会话恢复属于后台状态，避免污染对话 UI
+    return
+  }
+
+  if (eventType === 'session_key_resolved') {
+    // 路由解析是内部事件，不在消息流展示
+    return
+  }
+
+  if (eventType === 'session_tool_result') {
     appendMessage(setMessages, {
-      id: createId('system'),
-      role: 'system',
-      content: `会话已恢复 (${eventPayload.messageCount ?? 0} 条上下文)`,
+      id: createId('event'),
+      role: 'event',
+      content: JSON.stringify(eventPayload, null, 2),
       timestamp: Date.now(),
-      eventType: 'session_restored',
+      eventType,
     })
     return
   }
@@ -149,7 +161,7 @@ function handleWsEvent(
   })
 }
 
-export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
+export function useChat({ systemPrompt, modelConfig, peerId }: UseChatOptions) {
   const [mode, setMode] = useState<ChatMode>('simple')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -170,8 +182,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
   const ensureWs = useCallback(() => {
     if (reconnectWsRef.current) return reconnectWsRef.current
 
-    const sessionId = getSessionId()
-    const url = `${WS_BASE}/api/v1/chat/ws?sessionId=${sessionId}`
+    const url = `${WS_BASE}/api/v1/chat/ws`
 
     const rws = new ReconnectableWs({
       url,
@@ -263,6 +274,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
       const payload = JSON.stringify({
         event: 'chat',
         payload: {
+          route: buildDefaultRoute({ peerId: peerId ?? getPeerId() }),
           mode,
           model: modelConfig.model,
           baseUrl: modelConfig.baseUrl || undefined,
@@ -279,7 +291,7 @@ export function useChat({ systemPrompt, modelConfig }: UseChatOptions) {
       const rws = ensureWs()
       rws.send(payload)
     },
-    [buildMessages, ensureWs, mode, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.enableTools, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature],
+    [buildMessages, ensureWs, mode, modelConfig.apiKey, modelConfig.baseUrl, modelConfig.enableTools, modelConfig.maxTokens, modelConfig.model, modelConfig.temperature, peerId],
   )
 
   const send = useCallback(

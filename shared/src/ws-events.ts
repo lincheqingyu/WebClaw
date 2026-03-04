@@ -3,7 +3,7 @@
  * 前后端共享，确保事件名和 payload 类型一致
  */
 
-import type { SerializedTodoItem } from './session.js'
+import type { SerializedTodoItem, SessionRouteContext } from './session.js'
 
 /** 服务端 → 客户端 事件类型 */
 export type ServerEventType =
@@ -21,6 +21,8 @@ export type ServerEventType =
   | 'error'
   | 'ping'
   | 'session_restored'
+  | 'session_key_resolved'
+  | 'session_tool_result'
 
 /** 客户端 → 服务端 事件类型 */
 export type ClientEventType = 'chat' | 'cancel' | 'pong'
@@ -41,12 +43,15 @@ export interface ServerEventPayloadMap {
   error: { message: string }
   ping: { timestamp: number }
   session_restored: { sessionId: string; messageCount: number }
+  session_key_resolved: { sessionKey: string; sessionId: string; kind: string; channel: string }
+  session_tool_result: { tool: string; status: string; runId?: string; sessionKey?: string; detail?: string }
 }
 
 /** 客户端事件 payload 映射 */
 export interface ClientEventPayloadMap {
   chat: {
     mode: 'simple' | 'plan'
+    route: SessionRouteContext
     messages: Array<{ role: string; content: string }>
     model?: string
     baseUrl?: string

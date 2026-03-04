@@ -6,7 +6,7 @@
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
 interface ReconnectableWsOptions {
-  /** 完整 WS URL（含 sessionId） */
+  /** 完整 WS URL */
   readonly url: string
   /** 收到消息回调 */
   readonly onMessage: (data: string) => void

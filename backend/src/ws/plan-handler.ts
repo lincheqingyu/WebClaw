@@ -6,12 +6,14 @@ import type { WebSocket } from 'ws'
 import { z } from 'zod'
 import { createVllmModel } from '../agent/vllm-model.js'
 import { runManagerAgent, runWorkerAgent } from '../agent/index.js'
-import type { SessionRegistry, SessionState } from '../session/index.js'
+import type { SessionRuntimeState } from '../session-v2/index.js'
+import type { SessionService } from '../session-v2/index.js'
 import { getConfig } from '../config/index.js'
 import { normalizeIncomingMessages } from '../agent/message-utils.js'
 import { forwardAgentEvent, sendEvent } from './event-sender.js'
 import { chatRequestSchema } from '../types/api.js'
 import { logger } from '../utils/logger.js'
+import { clearCurrentToolSessionKey, setCurrentToolSessionKey } from '../agent/tools/session-tools/index.js'
 
 type ChatPayload = z.infer<typeof chatRequestSchema>
 
@@ -49,7 +51,7 @@ function shouldWaitForUserInput(text: string): boolean {
 
 async function executePendingTodos(
   ws: WebSocket,
-  state: SessionState,
+  state: SessionRuntimeState,
   payload: ChatPayload,
 ): Promise<void> {
   const config = getConfig()
@@ -163,9 +165,9 @@ async function executePendingTodos(
 
 export async function handlePlanChat(
   ws: WebSocket,
-  state: SessionState,
+  state: SessionRuntimeState,
   payload: ChatPayload,
-  registry: SessionRegistry,
+  sessionService: SessionService,
 ): Promise<void> {
   if (state.isRunning) {
     sendEvent(ws, 'error', { message: '当前会话正在运行，请稍后再试。' })
@@ -193,13 +195,15 @@ export async function handlePlanChat(
     return
   }
 
+  const persistedContext = sessionService.getPrunedContext(state)
   const contextMessages = normalized.contextMessages.length > 0
     ? normalized.contextMessages
-    : state.contextMessages
+    : persistedContext
 
   state.abortController = new AbortController()
 
   try {
+    setCurrentToolSessionKey(state.sessionKey)
     state.todoManager.loadItems([])
     const result = await runManagerAgent({
       messages: normalized.promptMessages,
@@ -255,6 +259,10 @@ export async function handlePlanChat(
       },
     })
 
+    sessionService.touchModelCall(state)
+    const managerMessages = result.messages.slice(contextMessages.length)
+    await sessionService.recordRunResult(state, piModel.id, normalized.promptMessages, managerMessages, result.messages)
+
     state.contextMessages = result.messages
     const managerText = extractLastAssistantText(result.messages)
     logger.info('Manager 规划完成', {
@@ -272,17 +280,18 @@ export async function handlePlanChat(
   } catch (error) {
     sendEvent(ws, 'error', { message: error instanceof Error ? error.message : String(error) })
   } finally {
+    clearCurrentToolSessionKey()
     state.isRunning = false
     state.abortController = undefined
-    registry.persist(state.sessionId)
+    await sessionService.persistState(state)
   }
 }
 
 export async function resumePlanChat(
   ws: WebSocket,
-  state: SessionState,
+  state: SessionRuntimeState,
   payload: ChatPayload,
-  registry: SessionRegistry,
+  sessionService: SessionService,
 ): Promise<void> {
   state.isRunning = true
   state.isWaiting = false
@@ -297,8 +306,9 @@ export async function resumePlanChat(
   } catch (error) {
     sendEvent(ws, 'error', { message: error instanceof Error ? error.message : String(error) })
   } finally {
+    clearCurrentToolSessionKey()
     state.isRunning = false
     state.abortController = undefined
-    registry.persist(state.sessionId)
+    await sessionService.persistState(state)
   }
 }

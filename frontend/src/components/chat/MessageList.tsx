@@ -5,9 +5,10 @@ interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
   isWaiting: boolean
+  onResendUser?: (message: string) => void
 }
 
-export function MessageList({ messages, isStreaming, isWaiting }: MessageListProps) {
+export function MessageList({ messages, isStreaming, isWaiting, onResendUser }: MessageListProps) {
   return (
     <div
       className="chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-2"
@@ -21,9 +22,9 @@ export function MessageList({ messages, isStreaming, isWaiting }: MessageListPro
           发送消息开始对话
         </div>
       )}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         {messages.map((message) => (
-          <MessageItem key={message.id} message={message} />
+          <MessageItem key={message.id} message={message} onResendUser={onResendUser} />
         ))}
       </div>
       {(isStreaming || isWaiting) && (

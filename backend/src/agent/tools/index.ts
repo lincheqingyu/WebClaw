@@ -11,6 +11,18 @@ import { createWriteFileTool } from './write-file.js'
 import { createSkillTool } from './skill.js'
 import { createTodoWriteTool } from './todo-write.js'
 import { createExtensionTools } from '../../extensions/index.js'
+import {
+  bindSessionService,
+  createSessionsHistoryTool,
+  createSessionsListTool,
+  createSessionsSendTool,
+  createSessionsSpawnTool,
+} from './session-tools/index.js'
+import type { SessionService } from '../../session-v2/index.js'
+
+export function initializeSessionTools(service: SessionService): void {
+  bindSessionService(service)
+}
 
 /** Simple 模式工具集（完整工具 + 扩展） */
 export function createSimpleTools(): AgentTool<any>[] {
@@ -20,13 +32,25 @@ export function createSimpleTools(): AgentTool<any>[] {
     createEditFileTool(),
     createWriteFileTool(),
     createSkillTool(),
+    createSessionsListTool(),
+    createSessionsHistoryTool(),
+    createSessionsSendTool(),
+    createSessionsSpawnTool(),
     ...createExtensionTools(),
   ]
 }
 
 /** Manager 工具集（read + skill + todo_write） */
 export function createManagerTools(todoManager: TodoManager): AgentTool<any>[] {
-  return [createReadFileTool(), createSkillTool(), createTodoWriteTool(todoManager)]
+  return [
+    createReadFileTool(),
+    createSkillTool(),
+    createTodoWriteTool(todoManager),
+    createSessionsListTool(),
+    createSessionsHistoryTool(),
+    createSessionsSendTool(),
+    createSessionsSpawnTool(),
+  ]
 }
 
 /** Worker 工具集（完整工具 + 扩展） */
@@ -37,6 +61,9 @@ export function createWorkerTools(): AgentTool<any>[] {
     createEditFileTool(),
     createWriteFileTool(),
     createSkillTool(),
+    createSessionsListTool(),
+    createSessionsHistoryTool(),
+    createSessionsSendTool(),
     ...createExtensionTools(),
   ]
 }

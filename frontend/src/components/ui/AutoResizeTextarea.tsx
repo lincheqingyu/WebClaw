@@ -16,6 +16,8 @@ interface AutoResizeTextareaProps {
   maxRows?: number
   /** 额外样式 */
   className?: string
+  /** 布局变化（是否多行 / 是否超出最大行） */
+  onLayoutChange?: (state: { multiline: boolean; overflowing: boolean }) => void
 }
 
 /**
@@ -31,10 +33,11 @@ export function AutoResizeTextarea({
   onSend,
   onToggleThinking,
   placeholder = '有什么我可以帮你的？',
-  maxRows = 8,
+  maxRows = 10,
   className,
+  onLayoutChange,
 }: AutoResizeTextareaProps) {
-  const textareaRef = useAutoResize(value, maxRows)
+  const textareaRef = useAutoResize(value, maxRows, onLayoutChange)
 
   /** 键盘事件：Enter 发送，Ctrl+Enter 换行，Ctrl+P 切换模式 */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -58,7 +61,7 @@ export function AutoResizeTextarea({
       placeholder={placeholder}
       rows={1}
       className={[
-        'w-full resize-none border-0 outline-none bg-transparent',
+        'chat-scrollbar w-full resize-none border-0 outline-none bg-transparent',
         'text-text-primary placeholder:text-text-muted',
         'leading-6 text-base',
         className ?? 'px-4 py-3',

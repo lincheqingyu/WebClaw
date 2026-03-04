@@ -34,6 +34,29 @@ const envSchema = z.object({
   /** 日志级别 */
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
+  /** Session 主键 */
+  SESSION_MAIN_KEY: z.string().default('main'),
+  /** Session 重置模式 */
+  SESSION_RESET_MODE: z.enum(['daily', 'idle']).default('daily'),
+  /** Session 每日重置小时（本地时区） */
+  SESSION_RESET_AT_HOUR: z.coerce.number().int().min(0).max(23).default(4),
+  /** Session 空闲重置分钟 */
+  SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).default(120),
+  /** Session 存储目录 */
+  SESSION_STORE_DIR: z.string().default('.sessions-v2'),
+  /** 上下文修剪模式 */
+  SESSION_PRUNING_MODE: z.enum(['off', 'cache-ttl']).default('cache-ttl'),
+  /** 修剪 TTL */
+  SESSION_PRUNING_TTL: z.string().default('5m'),
+  /** 保留最后 N 条 assistant 消息 */
+  SESSION_PRUNING_KEEP_LAST_ASSISTANTS: z.coerce.number().int().min(0).default(3),
+  /** 软裁剪阈值（上下文窗口比例） */
+  SESSION_PRUNING_SOFT_RATIO: z.coerce.number().min(0).max(1).default(0.3),
+  /** 硬清除阈值（上下文窗口比例） */
+  SESSION_PRUNING_HARD_RATIO: z.coerce.number().min(0).max(1).default(0.5),
+  /** 可裁剪工具结果最小字符数 */
+  SESSION_PRUNING_MIN_TOOL_CHARS: z.coerce.number().int().min(1).default(50000),
+
   /** 达梦数据库连接字符串（可选，扩展工具 execute_sql） */
   DM_CONNECT_STRING: z.string().optional(),
 

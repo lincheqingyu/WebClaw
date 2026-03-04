@@ -23,6 +23,17 @@ export interface HealthResponse {
 }
 
 export const chatRequestSchema = z.object({
+  route: z.object({
+    channel: z.enum(['webchat', 'internal', 'telegram', 'discord', 'whatsapp', 'unknown']),
+    chatType: z.enum(['dm', 'group', 'channel', 'thread']),
+    peerId: z.string().optional(),
+    groupId: z.string().optional(),
+    channelId: z.string().optional(),
+    threadId: z.string().optional(),
+    accountId: z.string().optional(),
+    senderName: z.string().optional(),
+    conversationLabel: z.string().optional(),
+  }),
   messages: z
       .array(
           z.object({

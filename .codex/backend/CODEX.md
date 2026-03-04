@@ -168,3 +168,41 @@
 - WS 仅使用 `user` 作为 prompt，`contextMessages` 由会话累积。
 - `todo_write` 产物会写入全局 `TODO`，当前未做会话级隔离。
 - HTTP 同步响应未返回 `provider` / `usage`，与文档示例不一致（若需要请扩展响应结构）。
+
+## 6. Session V2（工业级会话系统）
+
+本仓库已新增 `backend/src/session-v2`，用于替代旧 `session-registry` 的轻量快照机制，核心对齐 OpenClaw 三个设计面：
+
+### 生命周期与键模型
+- 入口：`session-v2/session-service.ts` + `session-v2/session-key.ts`
+- 新 WS 请求必须携带 `route`（channel/chatType/peerId/groupId/...），由服务端生成规范 `sessionKey`。
+- 重置策略：`daily@04:00 + idleMinutes=120`（可通过 env 覆盖），命中策略时自动换新 `sessionId`。
+
+### 存储模型
+- 存储目录：`SESSION_STORE_DIR`（默认 `.sessions-v2`）
+- 索引：`sessions.json`（`sessionKey -> SessionEntry`）
+- 快照：`snapshots/<sessionId>.json`
+- 转录：`transcripts/<sessionId>.jsonl`
+- 约束：上下文修剪只影响发送给模型的内存上下文，不改 JSONL 历史。
+
+### Context Pruning
+- 实现：`session-v2/session-pruner.ts`
+- 模式：`off | cache-ttl`（默认 `cache-ttl`）
+- 仅裁剪 `toolResult`，且保护最后 N 条 assistant 之后的工具结果。
+- 支持软裁剪（截头尾）与硬清除（占位符替换）。
+
+### 会话工具
+- 目录：`backend/src/agent/tools/session-tools/`
+- 已接入工具：
+  - `sessions_list`
+  - `sessions_history`
+  - `sessions_send`（`accepted/ok/timeout/error`）
+  - `sessions_spawn`（异步子会话执行 + 通知）
+- 工具运行时通过 `initializeSessionTools()` 绑定 `SessionService`。
+
+### WS 协议变化
+- `chatRequestSchema` 新增必填 `route`。
+- 服务端新增事件：
+  - `session_key_resolved`
+  - `session_tool_result`
+- 旧 `sessionId` 直连语义已废弃，统一由服务端按路由上下文解析会话。

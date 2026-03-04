@@ -5,13 +5,15 @@
 import type { WebSocket } from 'ws'
 import { createVllmModel } from '../agent/vllm-model.js'
 import { runSimpleAgent } from '../agent/index.js'
-import type { SessionRegistry, SessionState } from '../session/index.js'
+import type { SessionRuntimeState } from '../session-v2/index.js'
+import type { SessionService } from '../session-v2/index.js'
 import { getConfig } from '../config/index.js'
 import { normalizeIncomingMessages } from '../agent/message-utils.js'
 import { forwardAgentEvent, sendEvent } from './event-sender.js'
 import { z } from 'zod'
 import { chatRequestSchema } from '../types/api.js'
 import { logger } from '../utils/logger.js'
+import { clearCurrentToolSessionKey, setCurrentToolSessionKey } from '../agent/tools/session-tools/index.js'
 
 type ChatPayload = z.infer<typeof chatRequestSchema>
 
@@ -51,9 +53,9 @@ function describeContentShape(content: unknown): { kind: string; types?: string[
 
 export async function handleSimpleChat(
   ws: WebSocket,
-  state: SessionState,
+  state: SessionRuntimeState,
   payload: ChatPayload,
-  registry: SessionRegistry,
+  sessionService: SessionService,
 ): Promise<void> {
   if (state.isRunning) {
     sendEvent(ws, 'error', { message: '当前会话正在运行，请稍后再试。' })
@@ -81,13 +83,15 @@ export async function handleSimpleChat(
     return
   }
 
+  const persistedContext = sessionService.getPrunedContext(state)
   const contextMessages = normalized.contextMessages.length > 0
     ? normalized.contextMessages
-    : state.contextMessages
+    : persistedContext
 
   state.abortController = new AbortController()
 
   try {
+    setCurrentToolSessionKey(state.sessionKey)
     const result = await runSimpleAgent({
       messages: normalized.promptMessages,
       contextMessages,
@@ -149,6 +153,10 @@ export async function handleSimpleChat(
       },
     })
 
+    sessionService.touchModelCall(state)
+    const newMessages = result.messages.slice(contextMessages.length)
+    await sessionService.recordRunResult(state, piModel.id, normalized.promptMessages, newMessages, result.messages)
+
     state.contextMessages = result.messages
     const finalText = extractLastAssistantText(result.messages)
     logger.info('Simple 模式响应完成', {
@@ -160,8 +168,9 @@ export async function handleSimpleChat(
   } catch (error) {
     sendEvent(ws, 'error', { message: error instanceof Error ? error.message : String(error) })
   } finally {
+    clearCurrentToolSessionKey()
     state.isRunning = false
     state.abortController = undefined
-    registry.persist(state.sessionId)
+    await sessionService.persistState(state)
   }
 }

@@ -2,6 +2,9 @@ import {Moon, Settings, Sun} from 'lucide-react'
 import { ChatInput } from '../../../components/ui/ChatInput'
 import { MessageList } from '../../../components/chat/MessageList'
 import { useChat, type ModelConfig } from '../../../hooks/useChat'
+import { USE_PI_WEB_UI_PARTIAL } from '../../../config/api'
+import { PiMessageListAdapter } from '../../../adapters/pi-web-ui/PiMessageListAdapter'
+import { PiChatInputAdapter } from '../../../adapters/pi-web-ui/PiChatInputAdapter'
 
 /**
  * 组件的 Props 类型定义
@@ -20,6 +23,9 @@ interface ConversationAreaProps {
     onThemeToggle: () => void     // 切换主题的回调
     systemPrompt: string
     modelConfig: ModelConfig
+    conversationTitle: string
+    peerId: string
+    onConversationActivity: (message: string) => void
 }
 
 /**
@@ -35,12 +41,30 @@ export function ConversationArea({
                                      onThemeToggle,
                                      systemPrompt,
                                      modelConfig,
+                                     conversationTitle,
+                                     peerId,
+                                     onConversationActivity,
                                  }: ConversationAreaProps) {
     const { mode, setMode, messages, send, isStreaming, isWaiting } = useChat({
         systemPrompt,
         modelConfig,
+        peerId,
     })
     const hasSent = messages.length > 0
+
+    const MessageListComp = USE_PI_WEB_UI_PARTIAL ? PiMessageListAdapter : MessageList
+    const ChatInputComp = USE_PI_WEB_UI_PARTIAL ? PiChatInputAdapter : ChatInput
+
+    const handleSend = (text: string) => {
+      onConversationActivity(text)
+      send(text)
+    }
+
+    const handleResendUser = (text: string) => {
+      if (!text.trim()) return
+      onConversationActivity(text)
+      send(text)
+    }
 
     return (
       <div
@@ -50,8 +74,11 @@ export function ConversationArea({
         ].join(' ')}
       >
         <div className="flex h-full flex-col">
-            <header className="h-12 shrink-0 bg-surface-alt/95 backdrop-blur">
-            <div className="flex h-full w-full items-center justify-end px-4 md:px-6">
+          <header className="h-12 shrink-0 bg-surface-alt/95 backdrop-blur">
+            <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
+              <div className="min-w-0">
+                <h1 className="line-clamp-1 text-sm font-medium text-text-primary">{conversationTitle}</h1>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -93,24 +120,29 @@ export function ConversationArea({
                   <div className="text-2xl font-semibold text-text-primary">有什么我可以帮你的？</div>
                   <div className="mt-2 text-sm text-text-muted">支持 simple 与 plan 两种模式</div>
                 </div>
-                <ChatInput
+                <ChatInputComp
                   mode={mode}
                   onModeChange={setMode}
-                  onSend={send}
+                  onSend={handleSend}
                   showSuggestions
                 />
               </div>
             ) : (
               <div className="flex size-full flex-col">
                 <div className="flex-1 min-h-0">
-                  <MessageList messages={messages} isStreaming={isStreaming} isWaiting={isWaiting} />
+                  <MessageListComp
+                    messages={messages}
+                    isStreaming={isStreaming}
+                    isWaiting={isWaiting}
+                    onResendUser={handleResendUser}
+                  />
                 </div>
                 <div className="sticky bottom-0 z-10 w-full bg-gradient-to-t from-surface-alt via-surface-alt/95 to-transparent pt-4 pb-5">
                   <div className="mx-auto w-full max-w-3xl px-4 md:px-2">
-                    <ChatInput
+                    <ChatInputComp
                       mode={mode}
                       onModeChange={setMode}
-                      onSend={send}
+                      onSend={handleSend}
                       showSuggestions={false}
                     />
                   </div>
