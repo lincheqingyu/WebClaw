@@ -1,0 +1,21 @@
+[Unit]
+Description=WebClaw Backend (v%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.webclaw/workspace
+EnvironmentFile=%h/.webclaw/workspace/backend/.env
+ExecStart=/usr/bin/node %h/.webclaw/workspace/backend/dist/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制
+MemoryMax=1G
+TasksMax=50
+
+[Install]
+WantedBy=default.target

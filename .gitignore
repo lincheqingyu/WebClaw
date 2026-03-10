@@ -1,8 +1,45 @@
-node_modules
-.DS_Store
-dist
-.env
-.idea
-.sessions
+# 依赖
+node_modules/
 
-.claude
+# 构建产物
+dist/
+*.tsbuildinfo
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 会话数据
+.sessions/
+.sessions-v2/
+
+# 编译中间文件（shared 包）
+shared/src/*.js
+shared/src/*.js.map
+shared/src/*.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Claude Code 自动生成（不提交）
+.claude/settings.local.json
+
+# 本地临时文件
+*.local
+dist-ssr/

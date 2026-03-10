@@ -1,0 +1,29 @@
+# 依赖和构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Lock 文件（巨大且无用）
+pnpm-lock.yaml
+
+# 会话数据（大量 JSON）
+backend/.sessions-v2/
+backend/.sessions/
+
+# 编译产物（shared 包的编译输出）
+shared/src/*.js
+shared/src/*.js.map
+shared/src/*.d.ts
+
+# IDE
+.idea/
+
+# 插件和技能参考文档（大量且与业务无关）
+.agents/skills/
+.claude/skills/ui-ux-pro-max/data/
+.claude/skills/*/references/
+.claude/skills/*/examples/
+.claude/skills/*/scripts/
+
+# Codex
+.codex/
