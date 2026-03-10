@@ -196,6 +196,73 @@ function renderInlineMarkdown(text: string): Array<string | ReactNode> {
   return parts
 }
 
+function TableBlock({ raw, headers, alignments, rows }: {
+  raw: string
+  headers: string[]
+  alignments: Array<'left' | 'center' | 'right'>
+  rows: string[][]
+}) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(raw)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="group/table relative mx-2 overflow-x-auto rounded-xl border border-border bg-surface-alt px-2 py-2">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={[
+          'absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md',
+          'bg-surface-alt text-black transition-all hover:bg-surface',
+          'opacity-0 group-hover/table:opacity-100 group-focus-within/table:opacity-100',
+        ].join(' ')}
+        aria-label="复制表格"
+        title="复制表格"
+      >
+        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      </button>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border">
+            {headers.map((h, i) => (
+              <th
+                key={i}
+                style={{ textAlign: alignments[i] }}
+                className="px-3 py-1.5 font-semibold text-text-primary"
+              >
+                {renderInlineMarkdown(h)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} className="border-b border-border/50">
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  style={{ textAlign: alignments[ci] }}
+                  className="px-3 py-1.5 text-text-secondary"
+                >
+                  {renderInlineMarkdown(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function renderTextBlock(block: string, blockIndex: number): ReactNode {
   const lines = block.split('\n')
   const nodes: ReactNode[] = []
@@ -253,40 +320,16 @@ function renderTextBlock(block: string, blockIndex: number): ReactNode {
     })
 
     const rows = tableLines.slice(2).map(parseRow)
+    const raw = tableLines.join('\n')
 
     nodes.push(
-      <div key={`tbl-${blockIndex}-${tableKey++}`} className="mx-2 overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              {headers.map((h, i) => (
-                <th
-                  key={i}
-                  style={{ textAlign: alignments[i] }}
-                  className="px-3 py-1.5 font-semibold text-text-primary"
-                >
-                  {renderInlineMarkdown(h)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri} className="border-b border-border/50">
-                {row.map((cell, ci) => (
-                  <td
-                    key={ci}
-                    style={{ textAlign: alignments[ci] }}
-                    className="px-3 py-1.5 text-text-secondary"
-                  >
-                    {renderInlineMarkdown(cell)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>,
+      <TableBlock
+        key={`tbl-${blockIndex}-${tableKey++}`}
+        raw={raw}
+        headers={headers}
+        alignments={alignments}
+        rows={rows}
+      />,
     )
     tableLines = []
   }
