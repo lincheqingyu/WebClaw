@@ -441,14 +441,14 @@ function MarkdownPreviewBlock({ code }: { code: string }) {
   }
 
   return (
-    <div className="group/code relative mx-2 overflow-x-auto rounded-xl border border-border bg-surface-alt px-4 py-3">
+    <div className="group/mdblock relative mx-2 overflow-x-auto rounded-xl border border-border bg-surface-alt px-4 py-3">
       <button
         type="button"
         onClick={handleCopy}
         className={[
           'absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md',
           'bg-surface-alt text-black transition-all hover:bg-surface',
-          'opacity-0 group-hover/code:opacity-100 group-focus-within/code:opacity-100',
+          'opacity-0 group-hover/mdblock:opacity-100 group-focus-within/mdblock:opacity-100',
         ].join(' ')}
         aria-label="复制源码"
         title="复制源码"
