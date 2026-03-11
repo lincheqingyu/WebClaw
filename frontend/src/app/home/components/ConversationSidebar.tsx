@@ -4,18 +4,19 @@ export interface ConversationItem {
   id: string
   title: string
   preview: string
-  peerId: string
+  sessionId: string
   updatedAt: number
 }
 
 interface ConversationSidebarProps {
   conversations: ConversationItem[]
-  activeConversationId: string
+  activeConversationId: string | null
   collapsed: boolean
   onToggleCollapse: () => void
   onCreateConversation: () => void
   onSelectConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
+  isLoading?: boolean
 }
 
 function formatTime(timestamp: number): string {
@@ -46,6 +47,7 @@ export function ConversationSidebar({
   onCreateConversation,
   onSelectConversation,
   onDeleteConversation,
+  isLoading = false,
 }: ConversationSidebarProps) {
   return (
     <aside
@@ -110,6 +112,11 @@ export function ConversationSidebar({
         )}
 
         <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
+          {isLoading ? (
+            <div className="px-2 py-4 text-xs text-text-muted">正在加载会话...</div>
+          ) : conversations.length === 0 ? (
+            <div className="px-2 py-4 text-xs text-text-muted">暂无历史会话</div>
+          ) : (
           <ul className="space-y-1">
             {conversations.map((conversation) => {
               const isActive = conversation.id === activeConversationId
@@ -191,6 +198,7 @@ export function ConversationSidebar({
               )
             })}
           </ul>
+          )}
         </div>
       </div>
     </aside>
