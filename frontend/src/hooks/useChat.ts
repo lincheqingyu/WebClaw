@@ -32,8 +32,16 @@ export interface SessionResolvedPayload {
   channel: string
 }
 
+export interface SessionTitleUpdatedPayload {
+  sessionKey: string
+  sessionId: string
+  title: string
+  titleSource: 'route' | 'auto' | 'manual' | string
+}
+
 interface WsEventPayloadMap {
   session_key_resolved: SessionResolvedPayload
+  session_title_updated: SessionTitleUpdatedPayload
   session_restored: { sessionId: string; messageCount: number }
   need_user_input: { prompt: string }
   done: Record<string, never>
@@ -145,6 +153,16 @@ function handleWsEvent(
       sessionId: (eventPayload.sessionId as string) ?? '',
       kind: (eventPayload.kind as string) ?? '',
       channel: (eventPayload.channel as string) ?? '',
+    })
+    return
+  }
+
+  if (eventType === 'session_title_updated') {
+    onWsEvent?.('session_title_updated', {
+      sessionKey: (eventPayload.sessionKey as string) ?? '',
+      sessionId: (eventPayload.sessionId as string) ?? '',
+      title: (eventPayload.title as string) ?? '',
+      titleSource: (eventPayload.titleSource as string) ?? 'auto',
     })
     return
   }

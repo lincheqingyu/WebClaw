@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import type { AssistantMessage, UserMessage } from '@mariozechner/pi-ai'
-import type { SessionEntry, SessionRouteContext, SessionStats } from '@webclaw/shared'
+import { completeSimple, type AssistantMessage, type UserMessage } from '@mariozechner/pi-ai'
+import type { SessionEntry, SessionRouteContext, SessionStats, SessionTitleSource, SessionTitleStatus } from '@webclaw/shared'
 import { createSessionId } from '@webclaw/shared'
 import { getConfig, type Env } from '../config/index.js'
 import { logger } from '../utils/logger.js'
@@ -72,6 +72,13 @@ interface SendRunResult {
   error?: string
 }
 
+interface TitleGenerationOptions {
+  modelId?: string
+  baseUrl?: string
+  apiKey?: string
+  messages: AgentMessage[]
+}
+
 export interface SessionDetail {
   entry: SessionEntry
   snapshot: ReturnType<typeof serializeRuntimeState> | null
@@ -86,6 +93,7 @@ export class SessionService {
   private readonly pruner: SessionPruningConfig
   private readonly locks = new Map<string, Promise<void>>()
   private readonly pendingRuns = new Map<string, Promise<SendRunResult>>()
+  private readonly pendingTitleJobs = new Map<string, Promise<void>>()
   private readonly notifiers = new Map<string, (event: string, payload: Record<string, unknown>) => void>()
 
   constructor(config = getConfig()) {
@@ -104,8 +112,14 @@ export class SessionService {
   async init(): Promise<void> {
     await this.store.init()
     const loaded = await this.store.loadIndex()
+    let touched = false
     for (const [key, entry] of Object.entries(loaded)) {
-      this.entries.set(key, entry)
+      const normalized = this.normalizeEntry(entry)
+      if (normalized !== entry) touched = true
+      this.entries.set(key, normalized)
+    }
+    if (touched) {
+      await this.persistIndex()
     }
   }
 
@@ -131,6 +145,31 @@ export class SessionService {
     await this.store.saveIndex(entries)
   }
 
+  private normalizeEntry(entry: SessionEntry): SessionEntry {
+    if (entry.title || !entry.displayName?.trim()) return entry
+    return {
+      ...entry,
+      title: entry.displayName.trim(),
+      titleSource: 'route',
+      titleStatus: 'ready',
+    }
+  }
+
+  private updateEntryTitle(
+    entry: SessionEntry,
+    title: string | undefined,
+    source: SessionTitleSource | undefined,
+    status: SessionTitleStatus | undefined,
+  ): SessionEntry {
+    return {
+      ...entry,
+      title,
+      displayName: title ?? entry.displayName,
+      titleSource: source,
+      titleStatus: status,
+    }
+  }
+
   private createEntry(
     sessionKey: string,
     route: SessionRouteEnvelope,
@@ -139,6 +178,7 @@ export class SessionService {
     sessionId: string,
   ): SessionEntry {
     const now = Date.now()
+    const routeTitle = route.conversationLabel?.trim() || undefined
     return {
       key: sessionKey,
       sessionId,
@@ -146,7 +186,10 @@ export class SessionService {
       channel,
       createdAt: now,
       updatedAt: now,
-      displayName: route.conversationLabel ?? route.senderName,
+      title: routeTitle,
+      titleSource: routeTitle ? 'route' : undefined,
+      titleStatus: routeTitle ? 'ready' : undefined,
+      displayName: routeTitle ?? route.senderName,
       origin: {
         label: route.conversationLabel,
         provider: channel,
@@ -268,6 +311,139 @@ export class SessionService {
     ])
     await this.persistIndex()
     return true
+  }
+
+  async updateSessionTitle(keyOrSessionId: string, title: string): Promise<SessionEntry | null> {
+    const entry = this.getEntryByKeyOrSessionId(keyOrSessionId)
+    if (!entry) return null
+
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      throw new Error('标题不能为空')
+    }
+
+    const updated = this.updateEntryTitle(entry, normalizedTitle, 'manual', 'ready')
+    this.entries.set(entry.key, updated)
+    await this.persistIndex()
+    this.notify(entry.key, 'session_title_updated', {
+      sessionKey: updated.key,
+      sessionId: updated.sessionId,
+      title: normalizedTitle,
+      titleSource: 'manual',
+    })
+    return updated
+  }
+
+  private extractMessageText(content: unknown): string {
+    if (typeof content === 'string') return content
+    if (!Array.isArray(content)) return ''
+    return content
+      .filter((part) => part && typeof part === 'object' && (part as { type?: string }).type === 'text')
+      .map((part) => ((part as { text?: string }).text ?? ''))
+      .join('\n')
+      .trim()
+  }
+
+  private extractTitleContext(messages: AgentMessage[]): { userText: string; assistantText: string } | null {
+    const firstUser = messages.find((message) => message.role === 'user')
+    const firstAssistant = messages.find((message) => message.role === 'assistant')
+    const userText = firstUser ? this.extractMessageText(firstUser.content).slice(0, 800) : ''
+    const assistantText = firstAssistant ? this.extractMessageText(firstAssistant.content).slice(0, 800) : ''
+    if (!userText || !assistantText) return null
+    return { userText, assistantText }
+  }
+
+  private sanitizeGeneratedTitle(raw: string): string | null {
+    const normalized = raw
+      .replace(/^["'`#\-\s]+|["'`#\-\s]+$/g, '')
+      .replace(/^标题[:：]\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!normalized) return null
+    return normalized.slice(0, 24)
+  }
+
+  private async generateTitle(
+    entry: SessionEntry,
+    options: TitleGenerationOptions,
+  ): Promise<string | null> {
+    const context = this.extractTitleContext(options.messages)
+    if (!context) return null
+
+    const model = createVllmModel({
+      modelId: options.modelId,
+      baseUrl: options.baseUrl,
+      maxTokens: 64,
+    })
+    const response = await completeSimple(model, {
+      systemPrompt: '你是会话标题生成器。根据给定对话生成一个简短中文标题。只输出标题文本，不要解释，不要引号，不要句号，长度控制在20个汉字以内。',
+      messages: [
+        {
+          role: 'user',
+          content: `用户首条消息：\n${context.userText}\n\n助手回复：\n${context.assistantText}\n\n请生成标题。`,
+          timestamp: Date.now(),
+        } satisfies UserMessage,
+      ],
+    }, {
+      apiKey: options.apiKey ?? this.cfg.LLM_API_KEY,
+      temperature: 0.2,
+      maxTokens: 64,
+    })
+
+    const text = this.extractMessageText(response.content)
+    return this.sanitizeGeneratedTitle(text)
+  }
+
+  queueTitleGeneration(state: SessionRuntimeState, options: TitleGenerationOptions): void {
+    const entry = this.entries.get(state.sessionKey)
+    if (!entry) return
+    if (entry.title?.trim()) return
+    if (entry.titleSource === 'manual') return
+    if (entry.titleStatus === 'failed') return
+    if (this.pendingTitleJobs.has(state.sessionKey)) return
+
+    const pendingEntry = this.updateEntryTitle(entry, entry.title, entry.titleSource, 'pending')
+    this.entries.set(state.sessionKey, pendingEntry)
+    void this.persistIndex()
+
+    const job = (async () => {
+      try {
+        const title = await this.generateTitle(entry, options)
+        const latest = this.entries.get(state.sessionKey)
+        if (!latest) return
+        if (latest.titleSource === 'manual') return
+        if (!title) {
+          this.entries.set(state.sessionKey, this.updateEntryTitle(latest, latest.title, latest.titleSource, 'failed'))
+          await this.persistIndex()
+          return
+        }
+
+        const updated = this.updateEntryTitle(latest, title, 'auto', 'ready')
+        this.entries.set(state.sessionKey, updated)
+        await this.persistIndex()
+        this.notify(state.sessionKey, 'session_title_updated', {
+          sessionKey: updated.key,
+          sessionId: updated.sessionId,
+          title,
+          titleSource: 'auto',
+        })
+      } catch (error) {
+        const latest = this.entries.get(state.sessionKey)
+        if (latest && latest.titleSource !== 'manual' && !latest.title?.trim()) {
+          this.entries.set(state.sessionKey, this.updateEntryTitle(latest, latest.title, latest.titleSource, 'failed'))
+          await this.persistIndex()
+        }
+        logger.warn('session title generation failed', {
+          sessionKey: state.sessionKey,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      } finally {
+        this.pendingTitleJobs.delete(state.sessionKey)
+      }
+    })()
+
+    this.pendingTitleJobs.set(state.sessionKey, job)
   }
 
   private async withLock<T>(sessionKey: string, task: () => Promise<T>): Promise<T> {

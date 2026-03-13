@@ -16,6 +16,8 @@ export type {
   SessionKey,
   SessionKind,
   SessionChannel,
+  SessionTitleSource,
+  SessionTitleStatus,
   SessionOrigin,
   SessionStats,
   SessionEntry,

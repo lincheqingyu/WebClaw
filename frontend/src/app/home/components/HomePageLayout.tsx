@@ -6,8 +6,18 @@ import {
   ConversationSidebar,
   type ConversationItem,
 } from './ConversationSidebar'
-import type { ChatMessage, ModelConfig, SessionResolvedPayload } from '../../../hooks/useChat'
-import { fetchSessionHistory, fetchSessions, deleteSession as deleteSessionByKey } from '../../../lib/session-api'
+import type {
+  ChatMessage,
+  ModelConfig,
+  SessionResolvedPayload,
+  SessionTitleUpdatedPayload,
+} from '../../../hooks/useChat'
+import {
+  deleteSession as deleteSessionByKey,
+  fetchSessionHistory,
+  fetchSessions,
+  updateSessionTitle,
+} from '../../../lib/session-api'
 import {
   parsePeerIdFromSessionKey,
   toChatMessages,
@@ -89,7 +99,7 @@ function toConversationItem(session: SessionListItemVm): ConversationItem {
 }
 
 export function HomePageLayout() {
-  const [activeView, setActiveView] = useState<'chat' | 'chats'>('chat')
+  const [activeView, setActiveView] = useState<'chat' | 'sessions'>('chat')
   const [sessionItems, setSessionItems] = useState<SessionListItemVm[]>([])
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null)
   const [currentSessionKey, setCurrentSessionKey] = useState<string | null>(null)
@@ -212,6 +222,28 @@ export function HomePageLayout() {
     }
   }
 
+  const handleRenameConversation = async (sessionKey: string) => {
+    const current = sessionItems.find((item) => item.id === sessionKey)
+    const nextTitle = window.prompt('输入新的会话标题', current?.title ?? '')
+    if (!nextTitle || nextTitle.trim() === (current?.title ?? '').trim()) return
+
+    try {
+      const updated = await updateSessionTitle(sessionKey, nextTitle)
+      setSessionItems((prev) =>
+        prev.map((item) =>
+          item.id === sessionKey
+            ? {
+                ...item,
+                title: updated.title?.trim() || item.title,
+              }
+            : item,
+        ),
+      )
+    } catch {
+      setSessionError('重命名会话失败')
+    }
+  }
+
   const handleDeleteConversation = async (sessionKey: string) => {
     const confirmed = window.confirm('删除后将清空该会话的历史记录，确定继续吗？')
     if (!confirmed) return
@@ -233,6 +265,19 @@ export function HomePageLayout() {
     setCurrentSessionId(payload.sessionId)
     setSelectedSessionKey(payload.sessionKey)
     void refreshSessions()
+  }
+
+  const handleSessionTitleUpdated = (payload: SessionTitleUpdatedPayload) => {
+    setSessionItems((prev) =>
+      prev.map((item) =>
+        item.id === payload.sessionKey
+          ? {
+              ...item,
+              title: payload.title || item.title,
+            }
+          : item,
+      ),
+    )
   }
 
   const handleChatLifecycleEvent = (event: 'done' | 'need_user_input' | 'error') => {
@@ -259,9 +304,12 @@ export function HomePageLayout() {
         collapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
         onCreateConversation={handleStartNewConversation}
-        onOpenChats={() => setActiveView('chats')}
+        onOpenSessions={() => setActiveView('sessions')}
         onSelectConversation={(conversationId) => {
           void handleSelectConversation(conversationId)
+        }}
+        onRenameConversation={(conversationId) => {
+          void handleRenameConversation(conversationId)
         }}
         onDeleteConversation={(conversationId) => {
           void handleDeleteConversation(conversationId)
@@ -274,7 +322,7 @@ export function HomePageLayout() {
             {sessionError}
           </div>
         )}
-        {activeView === 'chats' ? (
+        {activeView === 'sessions' ? (
           <ChatsOverview
             conversations={sidebarItems}
             onCreateConversation={handleStartNewConversation}
@@ -297,6 +345,7 @@ export function HomePageLayout() {
             canSend={canSend}
             disabledReason={inputHint}
             onSessionResolved={handleSessionResolved}
+            onSessionTitleUpdated={handleSessionTitleUpdated}
             onChatLifecycleEvent={handleChatLifecycleEvent}
           />
         )}

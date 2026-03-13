@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Ellipsis, MessageSquareText, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Ellipsis, MessageSquareText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 export interface ConversationItem {
@@ -12,12 +12,13 @@ export interface ConversationItem {
 interface ConversationSidebarProps {
   conversations: ConversationItem[]
   activeConversationId: string | null
-  activeView: 'chat' | 'chats'
+  activeView: 'chat' | 'sessions'
   collapsed: boolean
   onToggleCollapse: () => void
   onCreateConversation: () => void
-  onOpenChats: () => void
+  onOpenSessions: () => void
   onSelectConversation: (conversationId: string) => void
+  onRenameConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
   isLoading?: boolean
 }
@@ -29,8 +30,9 @@ export function ConversationSidebar({
   collapsed,
   onToggleCollapse,
   onCreateConversation,
-  onOpenChats,
+  onOpenSessions,
   onSelectConversation,
+  onRenameConversation,
   onDeleteConversation,
   isLoading = false,
 }: ConversationSidebarProps) {
@@ -69,7 +71,7 @@ export function ConversationSidebar({
             onClick={onToggleCollapse}
             className={[
               'inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary',
-              'transition-colors hover:bg-hover/65 hover:text-text-primary',
+              'transition-colors hover:bg-[#f3f0e8] hover:text-text-primary',
             ].join(' ')}
             aria-label={collapsed ? '展开会话栏' : '收起会话栏'}
             title={collapsed ? '展开会话栏' : '收起会话栏'}
@@ -78,14 +80,14 @@ export function ConversationSidebar({
           </button>
         </div>
 
-        {collapsed && (
+        {collapsed ? (
           <div className="flex flex-col items-center gap-2 px-2 pb-3">
             <button
               type="button"
               onClick={onCreateConversation}
               className={[
-                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
-                'text-text-secondary transition-colors hover:bg-hover/65 hover:text-text-primary',
+                'inline-flex h-9 w-9 items-center justify-center rounded-xl text-text-secondary',
+                'transition-colors hover:bg-[#f3f0e8] hover:text-text-primary',
               ].join(' ')}
               aria-label="新建会话"
               title="新建会话"
@@ -94,31 +96,29 @@ export function ConversationSidebar({
             </button>
             <button
               type="button"
-              onClick={onOpenChats}
+              onClick={onOpenSessions}
               className={[
-                'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-primary',
-                activeView === 'chats' ? 'bg-[#ece9e1]' : 'hover:bg-[#f3f0e8]',
+                'inline-flex h-9 w-9 items-center justify-center rounded-xl text-text-primary',
+                activeView === 'sessions' ? 'bg-[#ece9e1]' : 'transition-colors hover:bg-[#f3f0e8]',
               ].join(' ')}
-              aria-label="会话管理"
-              title="会话管理"
+              aria-label="会话"
+              title="会话"
             >
               <MessageSquareText className="size-4" />
             </button>
           </div>
-        )}
-
-        {!collapsed && (
+        ) : (
           <div className="px-3 pb-3">
             <button
               type="button"
               onClick={onCreateConversation}
               className={[
                 'grid h-11 w-full grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 rounded-2xl px-3 text-left text-sm font-medium',
-                'text-text-primary transition-colors hover:bg-hover/65',
+                'text-text-primary transition-colors hover:bg-[#f3f0e8]',
               ].join(' ')}
               aria-label="新建会话"
             >
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-hover text-text-secondary">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#ece9e1] text-text-secondary">
                 <Plus className="size-4" />
               </span>
               <span>新建会话</span>
@@ -126,14 +126,14 @@ export function ConversationSidebar({
 
             <button
               type="button"
-              onClick={onOpenChats}
+              onClick={onOpenSessions}
               className={[
                 'mt-1.5 grid h-11 w-full grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 rounded-2xl px-3 text-left text-sm',
-                activeView === 'chats'
+                activeView === 'sessions'
                   ? 'bg-[#ece9e1] text-text-primary'
                   : 'text-text-primary transition-colors hover:bg-[#f3f0e8]',
               ].join(' ')}
-              aria-current={activeView === 'chats' ? 'page' : undefined}
+              aria-current={activeView === 'sessions' ? 'page' : undefined}
             >
               <span className="inline-flex h-7 w-7 items-center justify-center text-text-primary">
                 <MessageSquareText className="size-5" />
@@ -143,84 +143,94 @@ export function ConversationSidebar({
           </div>
         )}
 
-        <div
-          className={[
-            'chat-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
-            collapsed ? 'px-2 pb-3' : 'px-3 pb-3',
-          ].join(' ')}
-        >
-          {collapsed ? null : isLoading ? (
-            <div className="px-2 py-4 text-xs text-text-muted">正在加载会话...</div>
-          ) : conversations.length === 0 ? (
-            <div className="px-2 py-4 text-xs text-text-muted">暂无历史会话</div>
-          ) : (
-            <ul className="space-y-1">
-              {conversations.map((conversation) => {
-                const isActive = activeView === 'chat' && conversation.id === activeConversationId
+        {!collapsed && (
+          <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
+            {isLoading ? (
+              <div className="px-2 py-4 text-xs text-text-muted">正在加载会话...</div>
+            ) : conversations.length === 0 ? (
+              <div className="px-2 py-4 text-xs text-text-muted">暂无历史会话</div>
+            ) : (
+              <ul className="space-y-1">
+                {conversations.map((conversation) => {
+                  const isActive = activeView === 'chat' && conversation.id === activeConversationId
 
-                return (
-                  <li key={conversation.id}>
-                    <div
-                      className={[
-                        'group relative flex min-h-11 w-full items-center gap-2 rounded-2xl pl-3 pr-2 transition-colors',
-                        isActive ? 'bg-[#ece9e1]' : 'hover:bg-[#f3f0e8]',
-                      ].join(' ')}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onSelectConversation(conversation.id)}
+                  return (
+                    <li key={conversation.id}>
+                      <div
                         className={[
-                          'min-w-0 flex-1 py-3 text-left text-[15px] leading-5',
-                          isActive ? 'font-medium text-text-primary' : 'text-text-primary',
+                          'group relative flex min-h-11 w-full items-center gap-2 rounded-2xl pl-3 pr-2 transition-colors',
+                          isActive ? 'bg-[#ece9e1]' : 'hover:bg-[#f3f0e8]',
                         ].join(' ')}
-                        aria-current={isActive ? 'true' : undefined}
                       >
-                        <span className="line-clamp-1 block truncate">{conversation.title}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => onSelectConversation(conversation.id)}
+                          className={[
+                            'min-w-0 flex-1 py-3 text-left text-[15px] leading-5 text-text-primary',
+                            isActive ? 'font-medium' : '',
+                          ].join(' ')}
+                          aria-current={isActive ? 'true' : undefined}
+                        >
+                          <span className="line-clamp-1 block truncate">{conversation.title}</span>
+                        </button>
 
-                      {conversations.length > 1 && (
-                        <div ref={menuOpenId === conversation.id ? menuRef : null} className="relative shrink-0">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setMenuOpenId((prev) => (prev === conversation.id ? null : conversation.id))
-                            }}
-                            className={[
-                              'inline-flex h-8 w-8 items-center justify-center rounded-xl text-text-muted',
-                              'transition-all hover:bg-surface hover:text-text-primary',
-                              menuOpenId === conversation.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-                            ].join(' ')}
-                            aria-label="更多操作"
-                            title="更多操作"
-                          >
-                            <Ellipsis className="size-4" />
-                          </button>
-                          {menuOpenId === conversation.id && (
-                            <div className="absolute right-0 top-10 z-20 min-w-32 rounded-2xl border border-border/80 bg-surface p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.12)]">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setMenuOpenId(null)
-                                  onDeleteConversation(conversation.id)
-                                }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-500 transition-colors hover:bg-[#f3f0e8]"
-                              >
-                                <Trash2 className="size-4" />
-                                <span>删除</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
+                        {conversations.length > 1 && (
+                          <div ref={menuOpenId === conversation.id ? menuRef : null} className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMenuOpenId((prev) => (prev === conversation.id ? null : conversation.id))
+                              }}
+                              className={[
+                                'inline-flex h-8 w-8 items-center justify-center rounded-xl text-text-muted',
+                                'transition-all hover:bg-surface hover:text-text-primary',
+                                menuOpenId === conversation.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                              ].join(' ')}
+                              aria-label="更多操作"
+                              title="更多操作"
+                            >
+                              <Ellipsis className="size-4" />
+                            </button>
+
+                            {menuOpenId === conversation.id && (
+                              <div className="absolute right-0 top-10 z-20 min-w-40 rounded-2xl border border-border/80 bg-surface p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.12)]">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setMenuOpenId(null)
+                                    onRenameConversation(conversation.id)
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-text-primary transition-colors hover:bg-[#f3f0e8]"
+                                >
+                                  <Pencil className="size-4" />
+                                  <span>重命名</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setMenuOpenId(null)
+                                    onDeleteConversation(conversation.id)
+                                  }}
+                                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-500 transition-colors hover:bg-[#f3f0e8]"
+                                >
+                                  <Trash2 className="size-4" />
+                                  <span>删除</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   )

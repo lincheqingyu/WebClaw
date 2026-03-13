@@ -27,6 +27,8 @@ export interface SerializedTodoItem {
 export type SessionKey = string & { readonly __brand: 'SessionKey' }
 export type SessionKind = 'main' | 'group' | 'channel' | 'thread' | 'cron' | 'hook' | 'node' | 'other'
 export type SessionChannel = 'webchat' | 'internal' | 'telegram' | 'discord' | 'whatsapp' | 'unknown'
+export type SessionTitleSource = 'route' | 'auto' | 'manual'
+export type SessionTitleStatus = 'pending' | 'ready' | 'failed'
 
 export interface SessionOrigin {
   readonly label?: string
@@ -52,6 +54,9 @@ export interface SessionEntry {
   readonly updatedAt: number
   readonly createdAt: number
   readonly model?: string
+  readonly title?: string
+  readonly titleSource?: SessionTitleSource
+  readonly titleStatus?: SessionTitleStatus
   readonly displayName?: string
   readonly origin?: SessionOrigin
   readonly deliveryContext?: { channel: SessionChannel; to?: string; accountId?: string }

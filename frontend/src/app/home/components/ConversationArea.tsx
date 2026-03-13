@@ -7,6 +7,7 @@ import {
   type ChatMessage,
   type ModelConfig,
   type SessionResolvedPayload,
+  type SessionTitleUpdatedPayload,
 } from '../../../hooks/useChat'
 import { USE_PI_WEB_UI_PARTIAL } from '../../../config/api'
 import { PiMessageListAdapter } from '../../../adapters/pi-web-ui/PiMessageListAdapter'
@@ -26,6 +27,7 @@ interface ConversationAreaProps {
   canSend: boolean
   disabledReason?: string | null
   onSessionResolved: (payload: SessionResolvedPayload) => void
+  onSessionTitleUpdated: (payload: SessionTitleUpdatedPayload) => void
   onChatLifecycleEvent: (event: 'done' | 'need_user_input' | 'error') => void
 }
 
@@ -43,6 +45,7 @@ export function ConversationArea({
   canSend,
   disabledReason = null,
   onSessionResolved,
+  onSessionTitleUpdated,
   onChatLifecycleEvent,
 }: ConversationAreaProps) {
   const [scrollRequestVersion, setScrollRequestVersion] = useState(0)
@@ -62,6 +65,11 @@ export function ConversationArea({
     onWsEvent: (event, payload) => {
       if (event === 'session_key_resolved') {
         onSessionResolved(payload as SessionResolvedPayload)
+        return
+      }
+
+      if (event === 'session_title_updated') {
+        onSessionTitleUpdated(payload as SessionTitleUpdatedPayload)
         return
       }
 

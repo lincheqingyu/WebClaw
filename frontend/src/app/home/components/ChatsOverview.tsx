@@ -34,14 +34,14 @@ export function ChatsOverview({
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-8 pb-10 pt-10">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <h1 className="text-[3rem] leading-none tracking-[-0.03em] text-text-primary">Chats</h1>
+            <h1 className="text-[3rem] leading-none tracking-[-0.03em] text-text-primary">会话</h1>
           </div>
           <button
             type="button"
             onClick={onCreateConversation}
             className="inline-flex h-12 items-center rounded-2xl bg-[#171717] px-5 text-base font-medium text-white transition-transform hover:-translate-y-0.5"
           >
-            + New chat
+            + 新建会话
           </button>
         </div>
 
@@ -50,16 +50,13 @@ export function ChatsOverview({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your chats..."
+            placeholder="搜索会话..."
             className="h-15 w-full rounded-2xl border border-border/80 bg-surface px-14 text-xl text-text-primary outline-none transition-colors placeholder:text-text-secondary focus:border-[#d6d0c4]"
           />
         </div>
 
         <div className="mt-8 flex items-center gap-4 text-[15px] text-text-secondary">
-          <span>Your chats with Claude</span>
-          <button type="button" className="text-[#2d72d2] transition-opacity hover:opacity-80">
-            Select
-          </button>
+          <span>最近会话</span>
         </div>
 
         <div className="mt-5 border-t border-border/70">
@@ -73,7 +70,7 @@ export function ChatsOverview({
               <div className="min-w-0">
                 <div className="truncate text-[18px] leading-7 text-text-primary">{conversation.title}</div>
                 <div className="mt-1 text-[15px] text-text-secondary">
-                  Last message {formatRelativeTime(conversation.updatedAt)}
+                  最近更新于 {formatRelativeTime(conversation.updatedAt)}
                 </div>
               </div>
             </button>
