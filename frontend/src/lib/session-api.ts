@@ -15,6 +15,10 @@ interface SessionHistoryResponse {
   messages: SessionMessageRecord[]
 }
 
+interface SessionUpdateResponse {
+  session: SessionListEntry
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json() as T
   if (!response.ok) {
@@ -40,4 +44,17 @@ export async function deleteSession(sessionKey: string): Promise<void> {
   const encodedKey = encodeURIComponent(sessionKey)
   const response = await fetch(`${API_V1}/sessions/${encodedKey}`, { method: 'DELETE' })
   await readJson<ApiEnvelope<{ deleted: boolean; sessionKey: string }>>(response)
+}
+
+export async function updateSessionTitle(sessionKey: string, title: string): Promise<SessionListEntry> {
+  const encodedKey = encodeURIComponent(sessionKey)
+  const response = await fetch(`${API_V1}/sessions/${encodedKey}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title }),
+  })
+  const payload = await readJson<ApiEnvelope<SessionUpdateResponse>>(response)
+  return payload.data.session
 }

@@ -13,6 +13,9 @@ export interface SessionListEntry {
   channel: string
   updatedAt: number
   createdAt: number
+  title?: string
+  titleSource?: 'route' | 'auto' | 'manual'
+  titleStatus?: 'pending' | 'ready' | 'failed'
   displayName?: string
   messages?: SessionMessageRecord[]
 }
@@ -64,7 +67,7 @@ export function toSessionListItemVm(entry: SessionListEntry): SessionListItemVm 
 
   return {
     id: entry.key,
-    title: entry.displayName?.trim() || '未命名会话',
+    title: entry.title?.trim() || entry.displayName?.trim() || '未命名会话',
     preview: normalizePreview(latestText),
     updatedAt: entry.updatedAt,
     createdAt: entry.createdAt,

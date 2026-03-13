@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, MessageSquare, PenSquare, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MessageSquare, PenSquare, Pencil, Plus, Trash2 } from 'lucide-react'
 
 export interface ConversationItem {
   id: string
@@ -15,6 +15,7 @@ interface ConversationSidebarProps {
   onToggleCollapse: () => void
   onCreateConversation: () => void
   onSelectConversation: (conversationId: string) => void
+  onRenameConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
   isLoading?: boolean
 }
@@ -46,6 +47,7 @@ export function ConversationSidebar({
   onToggleCollapse,
   onCreateConversation,
   onSelectConversation,
+  onRenameConversation,
   onDeleteConversation,
   isLoading = false,
 }: ConversationSidebarProps) {
@@ -175,22 +177,40 @@ export function ConversationSidebar({
                     <span className="ml-1 flex shrink-0 items-center gap-1">
                       <span className="text-[11px] text-text-muted">{formatTime(conversation.updatedAt)}</span>
                       {conversations.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onDeleteConversation(conversation.id)
-                          }}
-                          className={[
-                            'inline-flex h-6 w-6 items-center justify-center rounded-md text-text-muted',
-                            'transition-colors hover:bg-surface-alt hover:text-red-500',
-                            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-                          ].join(' ')}
-                          aria-label="删除会话"
-                          title="删除会话"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onRenameConversation(conversation.id)
+                            }}
+                            className={[
+                              'inline-flex h-6 w-6 items-center justify-center rounded-md text-text-muted',
+                              'transition-colors hover:bg-surface-alt hover:text-text-primary',
+                              isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                            ].join(' ')}
+                            aria-label="重命名会话"
+                            title="重命名会话"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onDeleteConversation(conversation.id)
+                            }}
+                            className={[
+                              'inline-flex h-6 w-6 items-center justify-center rounded-md text-text-muted',
+                              'transition-colors hover:bg-surface-alt hover:text-red-500',
+                              isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                            ].join(' ')}
+                            aria-label="删除会话"
+                            title="删除会话"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </>
                       )}
                     </span>
                   </button>

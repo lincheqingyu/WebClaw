@@ -23,6 +23,7 @@ export type ServerEventType =
   | 'session_restored'
   | 'session_key_resolved'
   | 'session_tool_result'
+  | 'session_title_updated'
 
 /** 客户端 → 服务端 事件类型 */
 export type ClientEventType = 'chat' | 'cancel' | 'pong'
@@ -45,6 +46,7 @@ export interface ServerEventPayloadMap {
   session_restored: { sessionId: string; messageCount: number }
   session_key_resolved: { sessionKey: string; sessionId: string; kind: string; channel: string }
   session_tool_result: { tool: string; status: string; runId?: string; sessionKey?: string; detail?: string }
+  session_title_updated: { sessionKey: string; sessionId: string; title: string; titleSource: string }
 }
 
 /** 客户端事件 payload 映射 */

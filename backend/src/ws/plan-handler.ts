@@ -264,6 +264,12 @@ export async function handlePlanChat(
     await sessionService.recordRunResult(state, piModel.id, normalized.promptMessages, managerMessages, result.messages)
 
     state.contextMessages = result.messages
+    sessionService.queueTitleGeneration(state, {
+      modelId,
+      baseUrl,
+      apiKey,
+      messages: result.messages,
+    })
     const managerText = extractLastAssistantText(result.messages)
     logger.info('Manager 规划完成', {
       sessionId: state.sessionId,

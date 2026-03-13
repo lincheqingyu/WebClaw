@@ -158,6 +158,12 @@ export async function handleSimpleChat(
     await sessionService.recordRunResult(state, piModel.id, normalized.promptMessages, newMessages, result.messages)
 
     state.contextMessages = result.messages
+    sessionService.queueTitleGeneration(state, {
+      modelId,
+      baseUrl,
+      apiKey,
+      messages: result.messages,
+    })
     const finalText = extractLastAssistantText(result.messages)
     logger.info('Simple 模式响应完成', {
       sessionId: state.sessionId,

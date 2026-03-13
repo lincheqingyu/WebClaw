@@ -23,6 +23,10 @@ const detailQuerySchema = z.object({
   recentMessagesLimit: z.coerce.number().int().min(0).max(50).optional(),
 })
 
+const updateSessionSchema = z.object({
+  title: z.string().trim().min(1, '标题不能为空').max(80, '标题不能超过 80 个字符'),
+})
+
 router.get('/sessions', async (req, res, next) => {
   try {
     const parsed = listSessionsQuerySchema.safeParse(req.query)
@@ -77,6 +81,29 @@ router.get('/sessions/:sessionKey', async (req, res, next) => {
       data: {
         ...detail,
         recentMessages,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.patch('/sessions/:sessionKey', async (req, res, next) => {
+  try {
+    const parsed = updateSessionSchema.safeParse(req.body)
+    if (!parsed.success) {
+      throw createHttpError(400, parsed.error.issues.map((i) => i.message).join('; '))
+    }
+
+    const updated = await getSessionService().updateSessionTitle(req.params.sessionKey, parsed.data.title)
+    if (!updated) {
+      throw createHttpError(404, `会话不存在: ${req.params.sessionKey}`)
+    }
+
+    res.json({
+      success: true,
+      data: {
+        session: updated,
       },
     })
   } catch (error) {
