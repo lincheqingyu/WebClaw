@@ -6,12 +6,18 @@
 
 import type { Model, Message } from '@mariozechner/pi-ai'
 import { agentLoop, type AgentMessage, type AgentEvent } from '@mariozechner/pi-agent-core'
-import type { ThinkingLevel } from '@webclaw/shared'
+import type { SessionMode, SessionRouteContext, ThinkingLevel } from '@webclaw/shared'
 import { buildSimpleSystemPrompt } from '../core/prompts/system-prompts.js'
 import { createSimpleTools } from './tools/index.js'
-import { createTracker, MAX_ITERATIONS, MAX_TOOL_FAILURES } from './types.js'
+import {
+  createTracker,
+  extractToolResultText,
+  formatAgentFailureMessage,
+  MAX_ITERATIONS,
+  MAX_TOOL_FAILURES,
+} from './types.js'
 import { logger } from '../utils/logger.js'
-import { ensureMemoryFiles, loadMemoryInjectionText, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
+import { ensureMemoryFiles, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
 
 /** 记忆轮次计数状态（会话级） */
 export interface TurnState {
@@ -31,6 +37,8 @@ export interface SimpleAgentOptions {
   contextMessages?: AgentMessage[]
   turnState?: TurnState
   enableTools?: boolean
+  route?: SessionRouteContext
+  mode?: SessionMode
 }
 
 /** Simple Agent 运行结果 */
@@ -56,17 +64,23 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
     turnState,
     enableTools = false,
   } = options
-
+	
   await ensureMemoryFiles()
-  const memoryPrompt = await loadMemoryInjectionText()
-
-  const baseSystemPrompt = buildSimpleSystemPrompt()
-  const systemPrompt = [baseSystemPrompt, memoryPrompt, extraSystemPrompt?.trim()]
-    .filter((part): part is string => Boolean(part && part.length > 0))
-    .join('\n\n')
-
   const tools = enableTools ? createSimpleTools() : []
+  const systemPrompt = await buildSimpleSystemPrompt({
+    mode: options.mode ?? 'simple',
+    route: options.route,
+    modelId: model.id,
+    thinkingLevel,
+    tools,
+    toolsEnabled: enableTools,
+    extraInstructions: extraSystemPrompt,
+  })
   const tracker = createTracker()
+  let forcedStopReason: string | undefined
+  let stopInstructionIssued = false
+  let lastToolError: string | undefined
+  let lastAssistantMessage: (AgentMessage & { stopReason?: string; errorMessage?: string }) | null = null
 
   const abortController = new AbortController()
   const combinedSignal = signal
@@ -94,15 +108,21 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
             ? `已达到最大迭代次数(${MAX_ITERATIONS}次)`
             : `工具连续失败次数过多(${MAX_TOOL_FAILURES}次)`
 
+          forcedStopReason = reason
           logger.warn(`主 Agent 超限停止: ${reason}`)
-
-          // 安全保障：防止 LLM 忽略停止指令
-          abortController.abort()
+          if (stopInstructionIssued) {
+            abortController.abort()
+            return []
+          }
+          stopInstructionIssued = true
 
           return [
             {
               role: 'user' as const,
-              content: [{ type: 'text' as const, text: `${reason}，请停止调用工具，基于已有信息总结回答。` }],
+              content: [{
+                type: 'text' as const,
+                text: `${reason}，请停止调用工具，基于已有信息总结回答。${lastToolError ? `最近一次工具错误：${lastToolError}` : ''}`,
+              }],
               timestamp: Date.now(),
             },
           ]
@@ -122,15 +142,26 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
     }
     if (event.type === 'tool_execution_end' && event.isError) {
       tracker.toolFailCount++
+      lastToolError = extractToolResultText(event.result)
     }
 
     // 收集消息
     if (event.type === 'message_end') {
       allMessages.push(event.message)
+      if (event.message.role === 'assistant') {
+        lastAssistantMessage = event.message as AgentMessage & { stopReason?: string; errorMessage?: string }
+      }
     }
 
     // 转发事件给调用方（用于流式推送）
     onEvent?.(event)
+  }
+
+  if (lastAssistantMessage?.stopReason === 'error' || lastAssistantMessage?.stopReason === 'aborted') {
+    throw new Error(formatAgentFailureMessage(
+      lastAssistantMessage.errorMessage ?? forcedStopReason ?? '主 Agent 执行失败',
+      lastToolError,
+    ))
   }
 
   const mergedMessages = [...contextMessages, ...allMessages]

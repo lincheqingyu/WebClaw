@@ -84,6 +84,7 @@ export interface SessionRouteContext {
   readonly accountId?: string
   readonly senderName?: string
   readonly conversationLabel?: string
+  readonly userTimezone?: string
 }
 
 export interface SessionTextContentBlock {

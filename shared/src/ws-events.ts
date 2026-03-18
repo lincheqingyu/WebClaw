@@ -108,6 +108,7 @@ export interface ServerEventPayloadMap {
     status: 'start' | 'end'
     args?: unknown
     summary?: string
+    detail?: string
     isError?: boolean
   }
   session_tool_result: {

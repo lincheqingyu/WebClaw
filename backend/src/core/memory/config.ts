@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
+import { ensureMemoryConfigLocation, resolvePromptContextPaths } from '../prompts/context-files.js'
 
 export interface MemoryConfig {
   flushTurns: number
@@ -10,9 +11,6 @@ const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   flushTurns: 20,
   embeddingBaseUrl: '',
 }
-
-const MEMORY_DIR = path.join(process.cwd(), '.memory')
-const CONFIG_FILE = path.join(MEMORY_DIR, 'config.json')
 
 let cachedConfig: MemoryConfig | null = null
 
@@ -27,13 +25,15 @@ function normalizeConfig(input: Partial<MemoryConfig> | null | undefined): Memor
 }
 
 async function ensureMemoryDir(): Promise<void> {
-  await fs.mkdir(MEMORY_DIR, { recursive: true })
+  const paths = await ensureMemoryConfigLocation()
+  await fs.mkdir(path.dirname(paths.memoryConfigFile), { recursive: true })
 }
 
 export async function getMemoryConfig(): Promise<MemoryConfig> {
   if (cachedConfig) return cachedConfig
+  const { memoryConfigFile } = await ensureMemoryConfigLocation()
   try {
-    const raw = await fs.readFile(CONFIG_FILE, 'utf8')
+    const raw = await fs.readFile(memoryConfigFile, 'utf8')
     const parsed = JSON.parse(raw) as Partial<MemoryConfig>
     cachedConfig = normalizeConfig(parsed)
     return cachedConfig
@@ -47,7 +47,8 @@ export async function saveMemoryConfig(patch: Partial<MemoryConfig>): Promise<Me
   const current = await getMemoryConfig()
   const next = normalizeConfig({ ...current, ...patch })
   await ensureMemoryDir()
-  await fs.writeFile(CONFIG_FILE, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  const { memoryConfigFile } = resolvePromptContextPaths()
+  await fs.writeFile(memoryConfigFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
   cachedConfig = next
   return next
 }

@@ -36,7 +36,6 @@ export function createSimpleTools(): AgentTool<any>[] {
     createSessionsListTool(),
     createSessionsHistoryTool(),
     createSessionsSendTool(),
-    createSessionsSpawnTool(),
     ...createExtensionTools(),
   ]
 }

@@ -51,6 +51,22 @@ router.get('/sessions/:sessionKey/history', async (req, res, next) => {
   }
 })
 
+router.get('/sessions/:sessionKey/history-view', async (req, res, next) => {
+  try {
+    const detail = await getSessionRuntimeService().historyView(req.params.sessionKey)
+    res.json({
+      success: true,
+      data: {
+        sessionKey: req.params.sessionKey,
+        projection: detail.projection,
+        entries: detail.entries,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 router.get('/sessions/:sessionKey', async (req, res, next) => {
   try {
     const parsed = detailQuerySchema.safeParse(req.query)

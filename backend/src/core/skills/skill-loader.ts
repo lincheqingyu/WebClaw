@@ -18,6 +18,12 @@ export interface Skill {
   readonly dir: string
 }
 
+export interface SkillSummary {
+  readonly name: string
+  readonly description: string
+  readonly path: string
+}
+
 class SkillLoader {
   private readonly skillsDir: string
   private readonly skills: Map<string, Skill> = new Map()
@@ -139,6 +145,15 @@ class SkillLoader {
   /** 返回可用技能名称列表 */
   listSkills(): string[] {
     return Array.from(this.skills.keys())
+  }
+
+  /** 返回技能摘要列表，供系统提示词生成器使用 */
+  listSkillSummaries(): SkillSummary[] {
+    return Array.from(this.skills.values()).map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      path: skill.path,
+    }))
   }
 }
 

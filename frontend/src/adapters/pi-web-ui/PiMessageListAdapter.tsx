@@ -7,6 +7,8 @@ interface PiMessageListAdapterProps {
   isWaiting: boolean
   onResendUser?: (message: string) => void
   onToggleThinking?: (messageId: string) => void
+  onToggleTodo?: (messageId: string) => void
+  onTogglePlanTask?: (messageId: string, todoIndex: number) => void
   scrollRequestVersion?: number
 }
 

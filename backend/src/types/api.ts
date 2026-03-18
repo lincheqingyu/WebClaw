@@ -33,6 +33,7 @@ export const sessionRouteSchema = z.object({
     accountId: z.string().optional(),
     senderName: z.string().optional(),
     conversationLabel: z.string().optional(),
+    userTimezone: z.string().optional(),
   }),
 })
 

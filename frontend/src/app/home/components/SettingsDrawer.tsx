@@ -4,12 +4,18 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import {createDefaultThinkingConfig, type ThinkingConfig, type ThinkingProtocol} from '@webclaw/shared'
 import type {ModelConfig} from '../../../hooks/useChat'
 import {API_V1} from '../../../config/api.ts'
-
-interface SystemPromptItem {
-    id: string
-    title: string
-    prompt: string
-}
+import {
+    fetchContextFiles,
+    fetchMemoryFileContent,
+    fetchMemoryFiles,
+    fetchMemoryRuntimeConfig,
+    saveMemoryRuntimeConfig,
+    updateContextFile,
+    type ContextFileName,
+    type ContextFileRecord,
+    type MemoryFileMeta,
+    type MemoryRuntimeConfig,
+} from '../../../lib/context-api.ts'
 
 interface ModelPresetItem {
     id: string
@@ -19,17 +25,6 @@ interface ModelPresetItem {
     apiKey: string
 }
 
-interface MemoryConfig {
-    flushTurns: number
-    embeddingBaseUrl: string
-}
-
-interface MemoryFileMeta {
-    name: string
-    size: number
-    updatedAt: string
-}
-
 /**
  * SettingsDrawer 的 Props
  *
@@ -37,18 +32,30 @@ interface MemoryFileMeta {
 interface SettingsDrawerProps {
     isOpen: boolean
     onClose: () => void
-    systemPrompts: SystemPromptItem[]
-    activePromptId: string | null
-    onSystemPromptsChange: (items: SystemPromptItem[]) => void
-    onActivePromptChange: (id: string | null) => void
     modelConfig: ModelConfig
     onModelConfigChange: (config: ModelConfig) => void
 }
 
 type InlineDropdownId = 'maxTokens' | 'thinkingProtocol' | 'thinkingLevel'
+type EditableContextFileName = Extract<ContextFileName, 'SOUL.md' | 'IDENTITY.md' | 'USER.md' | 'MEMORY.md'>
+type ManagedContextFileName = Extract<ContextFileName, 'AGENTS.md' | 'TOOLS.md'>
 
 const MODEL_PRESET_STORAGE_KEY = 'webclaw.modelPresets'
 const ACTIVE_MODEL_PRESET_STORAGE_KEY = 'webclaw.activeModelPresetId'
+const EDITABLE_CONTEXT_FILES: ReadonlyArray<{
+    name: EditableContextFileName
+    title: string
+    summary: string
+}> = [
+    {name: 'SOUL.md', title: 'Soul', summary: '助手气质与表达风格'},
+    {name: 'IDENTITY.md', title: 'Identity', summary: '角色定位与能力边界'},
+    {name: 'USER.md', title: 'User', summary: '用户背景、偏好与约定'},
+    {name: 'MEMORY.md', title: 'Memory', summary: '长期记忆与运行配置'},
+] as const
+const MANAGED_CONTEXT_FILES: ReadonlyArray<{name: ManagedContextFileName; title: string}> = [
+    {name: 'AGENTS.md', title: 'AGENTS.md'},
+    {name: 'TOOLS.md', title: 'TOOLS.md'},
+] as const
 
 function loadModelPresetsFromStorage(): ModelPresetItem[] {
     try {
@@ -81,27 +88,34 @@ function loadActiveModelPresetIdFromStorage(): string | null {
 export function SettingsDrawer({
                                    isOpen,
                                    onClose,
-                                   systemPrompts,
-                                   activePromptId,
-                                   onSystemPromptsChange,
-                                   onActivePromptChange,
                                    modelConfig,
                                    onModelConfigChange,
                                }: SettingsDrawerProps) {
-    const NEW_PROMPT_VALUE = '__new__'
     const NEW_MODEL_PRESET_VALUE = '__new_model__'
 
-    const [isSystemPanelOpen, setIsSystemPanelOpen] = useState(false)
-    const [isPromptOptionsOpen, setIsPromptOptionsOpen] = useState(false)
+    const [isContextPanelOpen, setIsContextPanelOpen] = useState(false)
     const [isModelOptionsOpen, setIsModelOptionsOpen] = useState(false)
     const [activeInlineDropdown, setActiveInlineDropdown] = useState<InlineDropdownId | null>(null)
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isModelPanelOpen, setIsModelPanelOpen] = useState(false)
-    const [isMemoryPanelOpen, setIsMemoryPanelOpen] = useState(false)
-    const [selectedPromptId, setSelectedPromptId] = useState<string>(activePromptId ?? NEW_PROMPT_VALUE)
-    const [draftTitle, setDraftTitle] = useState('')
-    const [draftPrompt, setDraftPrompt] = useState('')
-    const [saveStatus, setSaveStatus] = useState<'Saved' | 'Editing'>('Saved')
+    const [selectedContextFile, setSelectedContextFile] = useState<EditableContextFileName>('SOUL.md')
+    const [selectedManagedFile, setSelectedManagedFile] = useState<ManagedContextFileName | null>(null)
+    const [contextFiles, setContextFiles] = useState<Record<ContextFileName, ContextFileRecord | undefined>>({
+        'SOUL.md': undefined,
+        'IDENTITY.md': undefined,
+        'USER.md': undefined,
+        'MEMORY.md': undefined,
+        'AGENTS.md': undefined,
+        'TOOLS.md': undefined,
+    })
+    const [contextDrafts, setContextDrafts] = useState<Record<EditableContextFileName, string>>({
+        'SOUL.md': '',
+        'IDENTITY.md': '',
+        'USER.md': '',
+        'MEMORY.md': '',
+    })
+    const [contextSaveStatus, setContextSaveStatus] = useState<'Saved' | 'Editing'>('Saved')
+    const [contextLoading, setContextLoading] = useState(false)
+    const [contextError, setContextError] = useState<string | null>(null)
     const [modelPresets, setModelPresets] = useState<ModelPresetItem[]>(() => loadModelPresetsFromStorage())
     const [selectedModelPresetId, setSelectedModelPresetId] = useState<string>(() => {
         return loadActiveModelPresetIdFromStorage() ?? NEW_MODEL_PRESET_VALUE
@@ -118,8 +132,8 @@ export function SettingsDrawer({
     const maxTokensDropdownRef = useRef<HTMLDivElement | null>(null)
     const thinkingProtocolDropdownRef = useRef<HTMLDivElement | null>(null)
     const thinkingLevelDropdownRef = useRef<HTMLDivElement | null>(null)
-    const [memoryConfig, setMemoryConfig] = useState<MemoryConfig>({flushTurns: 20, embeddingBaseUrl: ''})
-    const [memoryDraftConfig, setMemoryDraftConfig] = useState<MemoryConfig>({flushTurns: 20, embeddingBaseUrl: ''})
+    const [memoryConfig, setMemoryConfig] = useState<MemoryRuntimeConfig>({flushTurns: 20, embeddingBaseUrl: ''})
+    const [memoryDraftConfig, setMemoryDraftConfig] = useState<MemoryRuntimeConfig>({flushTurns: 20, embeddingBaseUrl: ''})
     const [memoryFiles, setMemoryFiles] = useState<MemoryFileMeta[]>([])
     const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null)
     const [selectedMemoryContent, setSelectedMemoryContent] = useState('')
@@ -199,7 +213,6 @@ export function SettingsDrawer({
         return 'high'
     })()
 
-    const activePrompt = systemPrompts.find((p) => p.id === activePromptId) ?? null
     const activeModelPreset = modelPresets.find((p) => p.id === selectedModelPresetId) ?? null
     const tokenOptions = [
         {key: 'low', label: 'Low', hint: '8k', value: 8192},
@@ -264,21 +277,6 @@ export function SettingsDrawer({
     }, [selectedModelPresetId])
 
     useEffect(() => {
-        if (!isSystemPanelOpen) return
-        const initialId = activePromptId ?? NEW_PROMPT_VALUE
-        setSelectedPromptId(initialId)
-        if (initialId === NEW_PROMPT_VALUE) {
-            setDraftTitle('')
-            setDraftPrompt('')
-        } else {
-            const selected = systemPrompts.find((p) => p.id === initialId)
-            setDraftTitle(selected?.title ?? '')
-            setDraftPrompt(selected?.prompt ?? '')
-        }
-        setSaveStatus('Saved')
-    }, [isSystemPanelOpen, activePromptId, systemPrompts])
-
-    useEffect(() => {
         if (!isModelPanelOpen) return
         const initialId = selectedModelPresetId ?? NEW_MODEL_PRESET_VALUE
         setSelectedModelPresetId(initialId)
@@ -298,68 +296,49 @@ export function SettingsDrawer({
     }, [isModelPanelOpen, modelPresets, selectedModelPresetId])
 
     useEffect(() => {
-        if (!isMemoryPanelOpen) return
+        if (!isContextPanelOpen) return
         void (async () => {
-            const [configRes, filesRes] = await Promise.all([
-                fetch(`${API_V1}/memory/config`),
-                fetch(`${API_V1}/memory/files`),
-            ])
-            const configJson = await configRes.json() as { data?: MemoryConfig }
-            const filesJson = await filesRes.json() as { data?: { files?: MemoryFileMeta[] } }
-            const cfg = configJson?.data ?? {flushTurns: 20, embeddingBaseUrl: ''}
-            setMemoryConfig(cfg)
-            setMemoryDraftConfig(cfg)
-            setMemoryFiles(filesJson?.data?.files ?? [])
-            setSelectedMemoryFile(null)
-            setSelectedMemoryContent('')
-            setMemorySaveStatus('Saved')
-        })()
-    }, [isMemoryPanelOpen])
+            setContextLoading(true)
+            setContextError(null)
+            try {
+                const [files, cfg, logs] = await Promise.all([
+                    fetchContextFiles(),
+                    fetchMemoryRuntimeConfig(),
+                    fetchMemoryFiles(),
+                ])
+                const nextMap = files.reduce<Record<ContextFileName, ContextFileRecord | undefined>>((acc, file) => {
+                    acc[file.name] = file
+                    return acc
+                }, {
+                    'SOUL.md': undefined,
+                    'IDENTITY.md': undefined,
+                    'USER.md': undefined,
+                    'MEMORY.md': undefined,
+                    'AGENTS.md': undefined,
+                    'TOOLS.md': undefined,
+                })
 
-    useEffect(() => {
-        if (!isSystemPanelOpen || saveStatus !== 'Editing') return
-
-        const timer = window.setTimeout(() => {
-            if (selectedPromptId === NEW_PROMPT_VALUE) {
-                if (!draftTitle.trim() && !draftPrompt.trim()) {
-                    setSaveStatus('Saved')
-                    return
-                }
-                const nextId = `prompt_${Date.now()}`
-                const nextItems = [
-                    ...systemPrompts,
-                    {id: nextId, title: draftTitle, prompt: draftPrompt},
-                ]
-                onSystemPromptsChange(nextItems)
-                onActivePromptChange(nextId)
-                setSelectedPromptId(nextId)
-                setSaveStatus('Saved')
-                return
+                setContextFiles(nextMap)
+                setContextDrafts({
+                    'SOUL.md': nextMap['SOUL.md']?.content ?? '',
+                    'IDENTITY.md': nextMap['IDENTITY.md']?.content ?? '',
+                    'USER.md': nextMap['USER.md']?.content ?? '',
+                    'MEMORY.md': nextMap['MEMORY.md']?.content ?? '',
+                })
+                setMemoryConfig(cfg)
+                setMemoryDraftConfig(cfg)
+                setMemoryFiles(logs)
+                setSelectedMemoryFile(null)
+                setSelectedMemoryContent('')
+                setContextSaveStatus('Saved')
+                setMemorySaveStatus('Saved')
+            } catch (error) {
+                setContextError(error instanceof Error ? error.message : '加载上下文失败')
+            } finally {
+                setContextLoading(false)
             }
-
-            const nextItems = systemPrompts.map((item) =>
-                item.id === selectedPromptId
-                    ? {...item, title: draftTitle, prompt: draftPrompt}
-                    : item,
-            )
-            onSystemPromptsChange(nextItems)
-            onActivePromptChange(selectedPromptId)
-            setSaveStatus('Saved')
-        }, 250)
-
-        return () => {
-            window.clearTimeout(timer)
-        }
-    }, [
-        draftPrompt,
-        draftTitle,
-        isSystemPanelOpen,
-        onActivePromptChange,
-        onSystemPromptsChange,
-        saveStatus,
-        selectedPromptId,
-        systemPrompts,
-    ])
+        })()
+    }, [isContextPanelOpen])
 
     useEffect(() => {
         if (!isModelPanelOpen || modelSaveStatus !== 'Editing') return
@@ -428,23 +407,21 @@ export function SettingsDrawer({
     ])
 
     useEffect(() => {
-        if (!isMemoryPanelOpen || memorySaveStatus !== 'Editing') return
+        if (!isContextPanelOpen || selectedContextFile !== 'MEMORY.md' || memorySaveStatus !== 'Editing') return
 
         const timer = window.setTimeout(async () => {
-            const response = await fetch(`${API_V1}/memory/config`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(memoryDraftConfig),
-            })
-            const json = await response.json() as { data?: MemoryConfig }
-            const next = json?.data ?? memoryDraftConfig
-            setMemoryConfig(next)
-            setMemoryDraftConfig(next)
-            setMemorySaveStatus('Saved')
+            try {
+                const next = await saveMemoryRuntimeConfig(memoryDraftConfig)
+                setMemoryConfig(next)
+                setMemoryDraftConfig(next)
+                setMemorySaveStatus('Saved')
+            } catch (error) {
+                setContextError(error instanceof Error ? error.message : '保存记忆配置失败')
+            }
         }, 250)
 
         return () => window.clearTimeout(timer)
-    }, [isMemoryPanelOpen, memoryDraftConfig, memorySaveStatus])
+    }, [isContextPanelOpen, memoryDraftConfig, memorySaveStatus, selectedContextFile])
 
     useEffect(() => {
         if (!activeInlineDropdown) return
@@ -494,46 +471,32 @@ export function SettingsDrawer({
     }, [activeInlineDropdown])
 
     useEffect(() => {
-        if (!isOpen || isSystemPanelOpen || isModelPanelOpen || isMemoryPanelOpen) {
+        if (!isOpen || isContextPanelOpen || isModelPanelOpen) {
             setActiveInlineDropdown(null)
         }
-    }, [isMemoryPanelOpen, isModelPanelOpen, isOpen, isSystemPanelOpen])
+    }, [isContextPanelOpen, isModelPanelOpen, isOpen])
 
-    const handlePromptSelection = (value: string) => {
-        setSelectedPromptId(value)
-        if (value === NEW_PROMPT_VALUE) {
-            setDraftTitle('Untitled instruction')
-            setDraftPrompt('')
-            onActivePromptChange(null)
-            setSaveStatus('Saved')
-            setIsPromptOptionsOpen(false)
-            return
+    const persistContextFile = useCallback(async (name: EditableContextFileName, content: string) => {
+        try {
+            const file = await updateContextFile(name, content)
+            setContextFiles((prev) => ({...prev, [name]: file}))
+            setContextDrafts((prev) => ({...prev, [name]: file.content}))
+            setContextSaveStatus('Saved')
+            setContextError(null)
+        } catch (error) {
+            setContextError(error instanceof Error ? error.message : '保存上下文失败')
         }
-        const selected = systemPrompts.find((p) => p.id === value)
-        setDraftTitle(selected?.title ?? '')
-        setDraftPrompt(selected?.prompt ?? '')
-        onActivePromptChange(value)
-        setSaveStatus('Saved')
-        setIsPromptOptionsOpen(false)
-    }
+    }, [])
 
-    const handleDeletePrompt = () => {
-        if (selectedPromptId === NEW_PROMPT_VALUE) return
-        setIsDeleteDialogOpen(true)
-    }
+    useEffect(() => {
+        if (!isContextPanelOpen || contextSaveStatus !== 'Editing') return
+        const draft = contextDrafts[selectedContextFile]
+        const timer = window.setTimeout(() => {
+            void persistContextFile(selectedContextFile, draft)
+        }, 250)
 
-    const confirmDeletePrompt = () => {
-        if (selectedPromptId === NEW_PROMPT_VALUE) return
-        const nextItems = systemPrompts.filter((item) => item.id !== selectedPromptId)
-        onSystemPromptsChange(nextItems)
-        onActivePromptChange(null)
-        setSelectedPromptId(NEW_PROMPT_VALUE)
-        setDraftTitle('')
-        setDraftPrompt('')
-        setSaveStatus('Saved')
-        setIsPromptOptionsOpen(false)
-        setIsDeleteDialogOpen(false)
-    }
+        return () => window.clearTimeout(timer)
+    }, [contextDrafts, contextSaveStatus, isContextPanelOpen, persistContextFile, selectedContextFile])
 
     const handleModelPresetSelection = (value: string) => {
         setSelectedModelPresetId(value)
@@ -573,11 +536,50 @@ export function SettingsDrawer({
         setModelSaveStatus('Saved')
     }
 
+    const handleOpenContextPanel = (name: EditableContextFileName) => {
+        setSelectedContextFile(name)
+        setSelectedManagedFile(null)
+        setSelectedMemoryFile(null)
+        setSelectedMemoryContent('')
+        setIsContextPanelOpen(true)
+    }
+
+    const handleCloseContextPanel = () => {
+        if (contextSaveStatus === 'Editing') {
+            void persistContextFile(selectedContextFile, contextDrafts[selectedContextFile])
+        }
+        setIsContextPanelOpen(false)
+    }
+
+    const handleSelectContextFile = (name: EditableContextFileName) => {
+        if (contextSaveStatus === 'Editing') {
+            void persistContextFile(selectedContextFile, contextDrafts[selectedContextFile])
+        }
+        setSelectedContextFile(name)
+        setSelectedManagedFile(null)
+        setSelectedMemoryFile(null)
+        setSelectedMemoryContent('')
+        setContextSaveStatus('Saved')
+        setContextError(null)
+    }
+
+    const handleSelectManagedFile = (name: ManagedContextFileName) => {
+        if (contextSaveStatus === 'Editing') {
+            void persistContextFile(selectedContextFile, contextDrafts[selectedContextFile])
+        }
+        setSelectedManagedFile(name)
+        setSelectedMemoryFile(null)
+        setSelectedMemoryContent('')
+    }
+
     const handleOpenMemoryFile = async (name: string) => {
-        const response = await fetch(`${API_V1}/memory/file?name=${encodeURIComponent(name)}`)
-        const json = await response.json() as { data?: { content?: string } }
-        setSelectedMemoryFile(name)
-        setSelectedMemoryContent(json?.data?.content ?? '')
+        try {
+            const content = await fetchMemoryFileContent(name)
+            setSelectedMemoryFile(name)
+            setSelectedMemoryContent(content)
+        } catch (error) {
+            setContextError(error instanceof Error ? error.message : '读取记忆文件失败')
+        }
     }
 
     return (
@@ -641,24 +643,26 @@ export function SettingsDrawer({
 
                     <button
                         type="button"
-                        onClick={() => setIsSystemPanelOpen(true)}
-                        className="system-instructions-card w-full rounded-2xl border border-border bg-surface-raised p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
+                        onClick={() => handleOpenContextPanel(selectedContextFile)}
+                        className="w-full rounded-2xl border border-border bg-surface-raised p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
                     >
-                        <span className="block text-sm font-semibold text-text-primary">System instructions</span>
+                        <span className="block text-sm font-semibold text-text-primary">Assistant context</span>
                         <span className="mt-1 block text-xs text-text-secondary">
-                            {activePrompt?.title || 'Optional tone and style instructions for the model'}
+                            Soul · Identity · User · Memory
                         </span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setIsMemoryPanelOpen(true)}
-                        className="memory-settings-card w-full rounded-2xl border border-border bg-surface-raised p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
-                    >
-                        <span className="block text-sm font-semibold text-text-primary">Memory settings</span>
                         <span className="mt-1 block text-xs text-text-secondary">
-                            Flush turns: {memoryConfig.flushTurns} · Embedding base URL configurable
+                            编辑 `.ZxhClaw` 上下文文件，系统托管 AGENTS / TOOLS 只读
                         </span>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {EDITABLE_CONTEXT_FILES.map((file) => (
+                                <span
+                                    key={file.name}
+                                    className="inline-flex rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] text-text-muted"
+                                >
+                                    {file.title}
+                                </span>
+                            ))}
+                        </div>
                     </button>
                 </div>
 
@@ -923,102 +927,207 @@ export function SettingsDrawer({
                     </div>
                 </div>
 
-                {isMemoryPanelOpen && (
+                {isContextPanelOpen && (
                     <div className="absolute inset-0 z-20 flex flex-col bg-surface-alt px-6 py-4">
                         <div className="flex items-center justify-between border-b border-border pb-3">
-                            <span className="text-base font-semibold text-text-primary">Memory settings</span>
+                            <div>
+                                <span className="text-base font-semibold text-text-primary">Assistant context</span>
+                                <p className="mt-1 text-xs text-text-secondary">Soul · Identity · User · Memory</p>
+                            </div>
                             <button
                                 type="button"
-                                onClick={() => setIsMemoryPanelOpen(false)}
-                                aria-label="关闭记忆面板"
+                                onClick={handleCloseContextPanel}
+                                aria-label="关闭上下文面板"
                                 className="flex size-8 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
                             >
                                 <X className="size-4"/>
                             </button>
                         </div>
 
-                        {selectedMemoryFile ? (
-                            <div className="mt-4 flex min-h-0 flex-1 flex-col">
-                                <div className="mb-3 flex items-center justify-between">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedMemoryFile(null)
-                                            setSelectedMemoryContent('')
-                                        }}
-                                        className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-                                    >
-                                        返回列表
-                                    </button>
-                                    <span className="text-xs text-text-muted">{selectedMemoryFile}</span>
-                                </div>
-                                <pre
-                                    className="min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-surface p-3 text-xs text-text-primary">
-                                    {selectedMemoryContent || '(empty)'}
-                                </pre>
+                        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
+                            <div className="grid grid-cols-2 gap-2">
+                                {EDITABLE_CONTEXT_FILES.map((file) => {
+                                    const active = selectedContextFile === file.name && !selectedManagedFile
+                                    return (
+                                        <button
+                                            key={file.name}
+                                            type="button"
+                                            onClick={() => handleSelectContextFile(file.name)}
+                                            className={clsx(
+                                                'rounded-2xl border px-3 py-3 text-left transition-colors',
+                                                active
+                                                    ? 'border-text-primary bg-surface-raised text-text-primary'
+                                                    : 'border-border bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                            )}
+                                        >
+                                            <div className="text-sm font-semibold">{file.title}</div>
+                                            <div className="mt-1 text-xs">{file.summary}</div>
+                                        </button>
+                                    )
+                                })}
                             </div>
-                        ) : (
-                            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
-                                <div className="space-y-2">
-                                    <label className="block text-xs text-text-secondary">Embedding base URL</label>
-                                    <input
-                                        value={memoryDraftConfig.embeddingBaseUrl}
-                                        onChange={(e) => {
-                                            setMemoryDraftConfig((prev) => ({
-                                                ...prev,
-                                                embeddingBaseUrl: e.target.value
-                                            }))
-                                            setMemorySaveStatus('Editing')
-                                        }}
-                                        placeholder="http://127.0.0.1:8000/v1"
-                                        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
-                                    />
-                                </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-xs text-text-secondary">Flush turns</label>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={memoryDraftConfig.flushTurns}
-                                        onChange={(e) => {
-                                            setMemoryDraftConfig((prev) => ({
-                                                ...prev,
-                                                flushTurns: Number(e.target.value || 20)
-                                            }))
-                                            setMemorySaveStatus('Editing')
-                                        }}
-                                        className="w-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
-                                    />
-                                </div>
-
-                                <div className="pt-2">
-                                    <div className="mb-2 text-xs text-text-secondary">
-                                        Memory files (read-only) · {memoryFiles.length}
+                            <div className="rounded-2xl border border-border bg-surface-raised p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 text-sm font-semibold text-text-primary">
+                                        {selectedManagedFile ? selectedManagedFile : EDITABLE_CONTEXT_FILES.find((file) => file.name === selectedContextFile)?.title}
                                     </div>
-                                    <div
-                                        className="max-h-52 space-y-2 overflow-auto rounded-xl border border-border bg-surface p-2">
-                                        {memoryFiles.map((file) => (
-                                            <button
-                                                key={file.name}
-                                                type="button"
-                                                onClick={() => void handleOpenMemoryFile(file.name)}
-                                                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-                                            >
-                                                <span className="truncate">{file.name}</span>
-                                                <span className="ml-2 shrink-0 text-[11px] text-text-muted">
-                                                    {new Date(file.updatedAt).toLocaleDateString()}
-                                                </span>
-                                            </button>
-                                        ))}
+                                    <span className="shrink-0 rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] text-text-muted">
+                                        {selectedManagedFile
+                                            ? contextFiles[selectedManagedFile]?.path ?? `.ZxhClaw/${selectedManagedFile}`
+                                            : contextFiles[selectedContextFile]?.path ?? `.ZxhClaw/${selectedContextFile}`}
+                                    </span>
+                                </div>
+                                <div className="mt-2 truncate text-xs text-text-secondary">
+                                    {selectedManagedFile
+                                        ? contextFiles[selectedManagedFile]?.description ?? '系统托管文件，仅供查看。'
+                                        : contextFiles[selectedContextFile]?.description ?? ''}
+                                </div>
+
+                                {contextError && (
+                                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                                        {contextError}
+                                    </div>
+                                )}
+
+                                {contextLoading ? (
+                                    <div className="mt-4 rounded-xl border border-border bg-surface px-3 py-8 text-sm text-text-secondary">
+                                        正在加载上下文文件...
+                                    </div>
+                                ) : selectedManagedFile ? (
+                                    <pre className="mt-4 min-h-[16rem] overflow-auto rounded-xl border border-border bg-surface px-3 py-3 text-xs leading-6 text-text-primary">
+                                        {contextFiles[selectedManagedFile]?.content || '(empty)'}
+                                    </pre>
+                                ) : (
+                                    <textarea
+                                        value={contextDrafts[selectedContextFile]}
+                                        onChange={(event) => {
+                                            setContextDrafts((prev) => ({
+                                                ...prev,
+                                                [selectedContextFile]: event.target.value,
+                                            }))
+                                            setContextSaveStatus('Editing')
+                                            setContextError(null)
+                                        }}
+                                        placeholder="在这里编辑上下文内容..."
+                                        className="mt-4 min-h-[16rem] w-full resize-none rounded-xl border border-border bg-surface px-3 py-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                        spellCheck
+                                    />
+                                )}
+
+                                {!selectedManagedFile && selectedContextFile === 'MEMORY.md' && (
+                                    <div className="mt-4 space-y-4 border-t border-border pt-4">
+                                        <div>
+                                            <div className="text-sm font-semibold text-text-primary">Memory runtime</div>
+                                            <div className="mt-1 text-xs text-text-secondary">记忆引擎配置与只读日志入口</div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-xs text-text-secondary">Embedding base URL</label>
+                                            <input
+                                                value={memoryDraftConfig.embeddingBaseUrl}
+                                                onChange={(e) => {
+                                                    setMemoryDraftConfig((prev) => ({
+                                                        ...prev,
+                                                        embeddingBaseUrl: e.target.value,
+                                                    }))
+                                                    setMemorySaveStatus('Editing')
+                                                }}
+                                                placeholder="http://127.0.0.1:8000/v1"
+                                                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-xs text-text-secondary">Flush turns</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={memoryDraftConfig.flushTurns}
+                                                onChange={(e) => {
+                                                    setMemoryDraftConfig((prev) => ({
+                                                        ...prev,
+                                                        flushTurns: Number(e.target.value || memoryConfig.flushTurns || 20),
+                                                    }))
+                                                    setMemorySaveStatus('Editing')
+                                                }}
+                                                className="w-28 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                            />
+                                        </div>
+
+                                        {selectedMemoryFile ? (
+                                            <div className="rounded-xl border border-border bg-surface p-3">
+                                                <div className="mb-3 flex items-center justify-between gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedMemoryFile(null)
+                                                            setSelectedMemoryContent('')
+                                                        }}
+                                                        className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
+                                                    >
+                                                        返回日志列表
+                                                    </button>
+                                                    <span className="truncate text-xs text-text-muted">{selectedMemoryFile}</span>
+                                                </div>
+                                                <pre className="max-h-56 overflow-auto text-xs leading-6 text-text-primary">
+                                                    {selectedMemoryContent || '(empty)'}
+                                                </pre>
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-xl border border-border bg-surface p-3">
+                                                <div className="mb-2 text-xs text-text-secondary">Memory logs (read-only) · {memoryFiles.length}</div>
+                                                <div className="max-h-52 space-y-2 overflow-auto">
+                                                    {memoryFiles.map((file) => (
+                                                        <button
+                                                            key={file.name}
+                                                            type="button"
+                                                            onClick={() => void handleOpenMemoryFile(file.name)}
+                                                            className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
+                                                        >
+                                                            <span className="truncate">{file.name}</span>
+                                                            <span className="ml-2 shrink-0 text-[11px] text-text-muted">
+                                                                {new Date(file.updatedAt).toLocaleDateString()}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="mt-4 border-t border-border pt-4">
+                                    <div className="mb-2 text-sm font-semibold text-text-primary">Managed by system</div>
+                                    <div className="flex gap-2">
+                                        {MANAGED_CONTEXT_FILES.map((file) => {
+                                            const active = selectedManagedFile === file.name
+                                            return (
+                                                <button
+                                                    key={file.name}
+                                                    type="button"
+                                                    onClick={() => handleSelectManagedFile(file.name)}
+                                                    className={clsx(
+                                                        'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                                                        active
+                                                            ? 'border-text-primary bg-surface-alt text-text-primary'
+                                                            : 'border-border bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                    )}
+                                                >
+                                                    {file.title}
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
 
-                                <div className="mt-auto text-xs text-text-muted">
-                                    {memorySaveStatus === 'Editing' ? 'Saving...' : 'Saved'} · 文件内容只读
+                                <div className="mt-4 text-xs text-text-muted">
+                                    {selectedManagedFile
+                                        ? 'Managed files are read-only.'
+                                        : `${contextSaveStatus === 'Editing' ? 'Saving...' : 'Saved'} · ${selectedContextFile === 'MEMORY.md' ? (memorySaveStatus === 'Editing' ? '同步保存 Memory runtime...' : 'Memory runtime 已同步') : 'Context files are saved to .ZxhClaw'}`}
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </div>
                 )}
 
@@ -1159,153 +1268,6 @@ export function SettingsDrawer({
                     </div>
                 )}
 
-                {isSystemPanelOpen && (
-                    <div className="absolute inset-0 z-10 flex flex-col bg-surface-alt px-6 py-4">
-                        <div className="flex items-center justify-between border-b border-border pb-3">
-                            <span className="text-base font-semibold text-text-primary">System instructions</span>
-                            <button
-                                type="button"
-                                onClick={() => setIsSystemPanelOpen(false)}
-                                aria-label="关闭面板"
-                                className="flex size-8 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-                            >
-                                <X className="size-4"/>
-                            </button>
-                        </div>
-
-                        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
-                            <div className="flex items-center gap-2">
-                                <div className="relative w-full">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPromptOptionsOpen((prev) => !prev)}
-                                        className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none"
-                                        aria-haspopup="listbox"
-                                        aria-expanded={isPromptOptionsOpen}
-                                        aria-label="System instruction"
-                                    >
-                                        <span className="truncate">
-                                            {selectedPromptId === NEW_PROMPT_VALUE
-                                                ? '+ Create new instruction'
-                                                : systemPrompts.find((item) => item.id === selectedPromptId)?.title || 'Untitled instruction'}
-                                        </span>
-                                        <ChevronDown className="size-4 text-text-muted"/>
-                                    </button>
-
-                                    {isPromptOptionsOpen && (
-                                        <div
-                                            className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-surface shadow-sm"
-                                            role="listbox"
-                                            aria-label="System instruction options"
-                                        >
-                                            <button
-                                                type="button"
-                                                onClick={() => handlePromptSelection(NEW_PROMPT_VALUE)}
-                                                className={clsx(
-                                                    'flex w-full items-center px-3 py-2 text-left text-sm',
-                                                    selectedPromptId === NEW_PROMPT_VALUE
-                                                        ? 'bg-hover text-text-primary'
-                                                        : 'bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
-                                                )}
-                                                role="option"
-                                                aria-selected={selectedPromptId === NEW_PROMPT_VALUE}
-                                            >
-                                                + Create new instruction
-                                            </button>
-                                            {systemPrompts.map((item) => (
-                                                <button
-                                                    key={item.id}
-                                                    type="button"
-                                                    onClick={() => handlePromptSelection(item.id)}
-                                                    className={clsx(
-                                                        'flex w-full items-center px-3 py-2 text-left text-sm',
-                                                        selectedPromptId === item.id
-                                                            ? 'bg-hover text-text-primary'
-                                                            : 'bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
-                                                    )}
-                                                    role="option"
-                                                    aria-selected={selectedPromptId === item.id}
-                                                >
-                                                    {item.title || 'Untitled instruction'}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <input
-                                    value={draftTitle}
-                                    onChange={(e) => {
-                                        setDraftTitle(e.target.value)
-                                        setSaveStatus('Editing')
-                                    }}
-                                    placeholder="Title"
-                                    className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleDeletePrompt}
-                                    disabled={selectedPromptId === NEW_PROMPT_VALUE || !selectedPromptId}
-                                    className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border text-text-secondary transition-colors hover:bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                                    aria-label="Delete system instruction"
-                                >
-                                    <Trash2 className="size-4"/>
-                                </button>
-                            </div>
-
-                            <textarea
-                                aria-label="System instructions"
-                                value={draftPrompt}
-                                onChange={(e) => {
-                                    setDraftPrompt(e.target.value)
-                                    setSaveStatus('Editing')
-                                }}
-                                placeholder="Optional tone and style instructions for the model"
-                                className="min-h-0 flex-1 w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
-                                spellCheck
-                            />
-
-                            <div className="mt-auto text-xs text-text-muted">
-                                Instructions are saved in local storage.
-                            </div>
-                        </div>
-
-                        {isDeleteDialogOpen && (
-                            <div
-                                className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-                                <div
-                                    role="dialog"
-                                    aria-modal="true"
-                                    aria-label="确认删除提示词"
-                                    className="mx-4 w-full max-w-xs rounded-xl border border-border bg-surface-raised p-4 shadow-lg"
-                                >
-                                    <div className="text-sm font-semibold text-text-primary">删除提示词？</div>
-                                    <div className="mt-2 text-xs text-text-secondary">
-                                        删除后无法恢复，确认继续吗？
-                                    </div>
-                                    <div className="mt-4 flex items-center justify-end gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsDeleteDialogOpen(false)}
-                                            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-                                        >
-                                            取消
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={confirmDeletePrompt}
-                                            className="rounded-lg bg-red-500 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-600"
-                                        >
-                                            删除
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     )

@@ -38,10 +38,7 @@ export function createExecuteSqlTool(): AgentTool<typeof parameters> {
 
       // 安全检查：仅允许 SELECT
       if (!/^\s*SELECT\b/i.test(sql)) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ success: false, error: '仅支持 SELECT 语句' }) }],
-          details: {},
-        }
+        throw new Error('仅支持 SELECT 语句')
       }
 
       const maxRows = params.max_rows ?? 100
@@ -85,10 +82,7 @@ export function createExecuteSqlTool(): AgentTool<typeof parameters> {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         logger.error(`execute_sql 失败: ${message}`)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ success: false, error: message }) }],
-          details: {},
-        }
+        throw new Error(message)
       }
     },
   }

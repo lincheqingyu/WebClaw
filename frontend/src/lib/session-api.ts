@@ -1,5 +1,5 @@
 import { API_V1 } from '../config/api'
-import type { SessionMessageRecord, SessionProjection } from '@webclaw/shared'
+import type { SessionEventEntry, SessionMessageRecord, SessionProjection } from '@webclaw/shared'
 
 interface ApiEnvelope<T> {
   success: boolean
@@ -13,6 +13,12 @@ interface SessionListResponse {
 interface SessionHistoryResponse {
   sessionKey: string
   messages: SessionMessageRecord[]
+}
+
+interface SessionHistoryViewResponse {
+  sessionKey: string
+  projection: SessionProjection
+  entries: SessionEventEntry[]
 }
 
 interface SessionUpdateResponse {
@@ -38,6 +44,13 @@ export async function fetchSessionHistory(sessionKey: string, limit = 100): Prom
   const response = await fetch(`${API_V1}/sessions/${encodedKey}/history?limit=${limit}`)
   const payload = await readJson<ApiEnvelope<SessionHistoryResponse>>(response)
   return payload.data.messages
+}
+
+export async function fetchSessionHistoryView(sessionKey: string): Promise<SessionHistoryViewResponse> {
+  const encodedKey = encodeURIComponent(sessionKey)
+  const response = await fetch(`${API_V1}/sessions/${encodedKey}/history-view`)
+  const payload = await readJson<ApiEnvelope<SessionHistoryViewResponse>>(response)
+  return payload.data
 }
 
 export async function deleteSession(sessionKey: string): Promise<void> {

@@ -3,8 +3,9 @@ export {
   loadMemoryInjectionText,
   appendDailyMemoryEntry,
   getDailyMemoryFilePath,
+  getMemoryDir,
+  getMainMemoryFilePath,
   listMemoryFiles,
   readMemoryFile,
-  MAIN_MEMORY_FILE,
 } from './store.js'
 export { recordMemoryTurnAndMaybeFlush, resetMemoryTurnCounter } from './flush.js'

@@ -17,7 +17,6 @@ interface ConversationAreaProps {
   onSettingsToggle: () => void
   isDark: boolean
   onThemeToggle: () => void
-  systemPrompt: string
   modelConfig: ModelConfig
   conversationTitle: string
   sessionMetaText?: string | null
@@ -36,7 +35,6 @@ export function ConversationArea({
   onSettingsToggle,
   isDark,
   onThemeToggle,
-  systemPrompt,
   modelConfig,
   conversationTitle,
   sessionMetaText = null,
@@ -58,11 +56,12 @@ export function ConversationArea({
     send,
     stop,
     toggleThinking,
+    toggleTodo,
+    togglePlanTask,
     isStreaming,
     isWaiting,
     replaceMessages,
   } = useChat({
-    systemPrompt,
     modelConfig,
     peerId,
     currentSessionKey,
@@ -104,11 +103,7 @@ export function ConversationArea({
   const effectiveCanSend = canSend && !isStreaming && (!isWaiting || canContinuePlan)
   const effectiveDisabledReason =
     disabledReason
-      ?? (isStreaming
-        ? '当前回答尚未完成'
-        : isWaiting && !canContinuePlan
-          ? '当前计划正在等待补充信息，请切换到 plan 模式继续'
-          : null)
+      ?? (isWaiting && !canContinuePlan ? '当前计划正在等待补充信息，请切换到 plan 模式继续' : null)
 
   const MessageListComp = USE_PI_WEB_UI_PARTIAL ? PiMessageListAdapter : MessageList
   const ChatInputComp = USE_PI_WEB_UI_PARTIAL ? PiChatInputAdapter : ChatInput
@@ -225,6 +220,8 @@ export function ConversationArea({
                   isWaiting={isWaiting}
                   onResendUser={handleResendUser}
                   onToggleThinking={toggleThinking}
+                  onToggleTodo={toggleTodo}
+                  onTogglePlanTask={togglePlanTask}
                   scrollRequestVersion={scrollRequestVersion}
                 />
               </div>

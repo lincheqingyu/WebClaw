@@ -81,7 +81,7 @@ test('branchWithSummary creates alternate branch context', () => {
   assert.equal(texts[2], 'new answer')
 })
 
-test('buildSessionContext preserves thinking blocks for assistant messages', () => {
+test('buildSessionContext strips thinking blocks and keeps assistant text', () => {
   const manager = createManager()
   manager.appendThinkingLevelChange('medium')
   manager.appendMessage({ role: 'user', content: 'why?', timestamp: Date.now() - 10_000 })
@@ -101,8 +101,8 @@ test('buildSessionContext preserves thinking blocks for assistant messages', () 
 
   assert.equal(context.thinkingLevel, 'medium')
   assert.ok(assistant)
-  assert.deepEqual(assistant.content, [
-    { type: 'thinking', thinking: 'first thought', thinkingSignature: 'reasoning' },
-    { type: 'text', text: 'final answer' },
-  ])
+  assert.ok(Array.isArray(assistant.content))
+  assert.equal(assistant.content.length, 1)
+  assert.equal(assistant.content[0]?.type, 'text')
+  assert.equal('text' in assistant.content[0] ? assistant.content[0].text : '', 'final answer')
 })

@@ -8,6 +8,13 @@ import { ReconnectableWs, type ConnectionStatus } from '../lib/ws-reconnect.ts'
 export type ChatMode = 'simple' | 'plan'
 export type MessageRole = 'user' | 'assistant' | 'system' | 'event'
 
+export interface PlanTaskDetail {
+  todoIndex: number
+  title?: string
+  stepId?: string
+  content: string
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -15,6 +22,10 @@ export interface ChatMessage {
   thinkingContent?: string
   hasThinking?: boolean
   isThinkingExpanded?: boolean
+  todoItems?: ServerEventPayloadMap['todo_state']['items']
+  planDetails?: Record<number, PlanTaskDetail>
+  isTodoExpanded?: boolean
+  expandedPlanTaskIndexes?: number[]
   timestamp: number
   eventType?: string
   stepId?: string
@@ -34,7 +45,6 @@ export type SessionResolvedPayload = ServerEventPayloadMap['session_bound']
 export type SessionTitleUpdatedPayload = ServerEventPayloadMap['session_title_updated']
 
 interface UseChatOptions {
-  systemPrompt: string
   modelConfig: ModelConfig
   peerId?: string
   currentSessionKey?: string | null
@@ -60,14 +70,6 @@ function updateMessage(
   setMessages((prev) => prev.map((message) => (message.id === id ? updater(message) : message)))
 }
 
-function stepTitle(kind: StepKind, title?: string, todoIndex?: number): string {
-  if (title?.trim()) return title.trim()
-  if (kind === 'planner') return '正在生成计划'
-  if (kind === 'task') return `任务 ${typeof todoIndex === 'number' ? todoIndex + 1 : ''}`.trim()
-  if (kind === 'session_tool') return '正在执行会话工具'
-  return '正在生成回复'
-}
-
 function renderTodo(items: ServerEventPayloadMap['todo_state']['items']): string {
   if (items.length === 0) return '当前没有任务。'
   return items
@@ -80,7 +82,26 @@ function renderTodo(items: ServerEventPayloadMap['todo_state']['items']): string
     .join('\n')
 }
 
-export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, onWsEvent }: UseChatOptions) {
+function buildToolFailureGuidance(toolName: string, detail?: string): string {
+  if (toolName === 'execute_sql') {
+    if (detail?.includes('无效的表或视图名')) {
+      return '建议补充准确的表名，或者改成“先探查数据库里的表和字段，再继续查询”。'
+    }
+    if (detail?.includes('无效的列')) {
+      return '建议补充准确的字段名，或者让我先探查可用字段。'
+    }
+    return '建议补充更准确的表名、字段名或筛选条件，或者先让我探查 schema。'
+  }
+
+  return '建议补充更具体的目标、参数或上下文后再试。'
+}
+
+function formatToolFailureMessage(toolName: string, detail?: string): string {
+  const normalizedDetail = detail?.trim() || '工具执行失败'
+  return `${toolName} 执行失败：${normalizedDetail}\n\n${buildToolFailureGuidance(toolName, normalizedDetail)}`
+}
+
+export function useChat({ modelConfig, peerId, currentSessionKey, onWsEvent }: UseChatOptions) {
   const [mode, setMode] = useState<ChatMode>('simple')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -93,6 +114,7 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
   const currentRunIdRef = useRef<string | null>(null)
   const currentPauseIdRef = useRef<string | null>(null)
   const stepMessageIdsRef = useRef<Map<string, string>>(new Map())
+  const stepMetaRef = useRef<Map<string, { kind: StepKind; todoIndex?: number }>>(new Map())
   const todoMessageIdRef = useRef<string | null>(null)
   const pendingUserIdRef = useRef<string | null>(null)
 
@@ -104,6 +126,7 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
     currentRunIdRef.current = null
     currentPauseIdRef.current = null
     stepMessageIdsRef.current.clear()
+    stepMetaRef.current.clear()
     todoMessageIdRef.current = null
     pendingUserIdRef.current = null
     setIsStreaming(false)
@@ -112,6 +135,7 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
 
   const replaceMessages = useCallback((nextMessages: ChatMessage[]) => {
     clearDerivedState()
+    todoMessageIdRef.current = nextMessages.find((message) => message.eventType === 'plan')?.id ?? null
     setMessages(nextMessages)
   }, [clearDerivedState])
 
@@ -126,16 +150,61 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
     }))
   }, [])
 
-  const ensureStepMessage = useCallback((stepId: string, kind: StepKind, title?: string, todoIndex?: number) => {
+  const togglePlanTask = useCallback((id: string, todoIndex: number) => {
+    updateMessage(setMessages, id, (message) => {
+      const current = new Set(message.expandedPlanTaskIndexes ?? [])
+      if (current.has(todoIndex)) {
+        current.delete(todoIndex)
+      } else {
+        current.add(todoIndex)
+      }
+
+      return {
+        ...message,
+        expandedPlanTaskIndexes: Array.from(current).sort((a, b) => a - b),
+      }
+    })
+  }, [])
+
+  const toggleTodo = useCallback((id: string) => {
+    updateMessage(setMessages, id, (message) => ({
+      ...message,
+      isTodoExpanded: !message.isTodoExpanded,
+    }))
+  }, [])
+
+  const ensurePlanMessage = useCallback(() => {
+    const existing = todoMessageIdRef.current
+    if (existing) return existing
+
+    const id = createId('plan')
+    todoMessageIdRef.current = id
+    appendMessage(setMessages, {
+      id,
+      role: 'event',
+      content: '',
+      todoItems: [],
+      planDetails: {},
+      isTodoExpanded: true,
+      expandedPlanTaskIndexes: [],
+      timestamp: Date.now(),
+      eventType: 'plan',
+    })
+    return id
+  }, [])
+
+  const ensureStepMessage = useCallback((stepId: string, kind: StepKind) => {
+    if (kind !== 'simple_reply') return null
+
     const existing = stepMessageIdsRef.current.get(stepId)
     if (existing) return existing
 
-    const id = createId(kind === 'simple_reply' ? 'assistant' : 'event')
+    const id = createId('assistant')
     stepMessageIdsRef.current.set(stepId, id)
     appendMessage(setMessages, {
       id,
-      role: kind === 'simple_reply' ? 'assistant' : 'event',
-      content: kind === 'simple_reply' ? '' : stepTitle(kind, title, todoIndex),
+      role: 'assistant',
+      content: '',
       thinkingContent: '',
       hasThinking: false,
       isThinkingExpanded: false,
@@ -199,7 +268,53 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
 
           if (event === 'step_state') {
             const step = payload as ServerEventPayloadMap['step_state']
-            const messageId = ensureStepMessage(step.stepId, step.kind, step.title, step.todoIndex)
+            stepMetaRef.current.set(step.stepId, { kind: step.kind, todoIndex: step.todoIndex })
+
+            if (step.kind === 'planner') {
+              ensurePlanMessage()
+              onWsEvent?.(event, step)
+              return
+            }
+
+            if (step.kind === 'task') {
+              const todoIndex = step.todoIndex ?? stepMetaRef.current.get(step.stepId)?.todoIndex
+              if (typeof todoIndex === 'number') {
+                const planMessageId = ensurePlanMessage()
+                updateMessage(setMessages, planMessageId, (message) => {
+                  const existing = message.planDetails?.[todoIndex] ?? {
+                    todoIndex,
+                    content: '',
+                  }
+
+                  return {
+                    ...message,
+                    expandedPlanTaskIndexes: message.expandedPlanTaskIndexes?.includes(todoIndex)
+                      ? message.expandedPlanTaskIndexes
+                      : [...(message.expandedPlanTaskIndexes ?? []), todoIndex].sort((a, b) => a - b),
+                    planDetails: {
+                      ...(message.planDetails ?? {}),
+                      [todoIndex]: {
+                        ...existing,
+                        stepId: step.stepId,
+                        title: step.title ?? existing.title,
+                        content:
+                          step.status === 'completed' && step.summary
+                            ? step.summary
+                            : existing.content,
+                      },
+                    },
+                  }
+                })
+              }
+              onWsEvent?.(event, step)
+              return
+            }
+
+            const messageId = ensureStepMessage(step.stepId, step.kind)
+            if (!messageId) {
+              onWsEvent?.(event, step)
+              return
+            }
             if (step.summary && step.status === 'completed') {
               const summary = step.summary
               updateMessage(setMessages, messageId, (message) => ({
@@ -213,7 +328,42 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
 
           if (event === 'step_delta') {
             const delta = payload as ServerEventPayloadMap['step_delta']
+            if (delta.kind === 'task') {
+              const todoIndex = stepMetaRef.current.get(delta.stepId)?.todoIndex
+              if (typeof todoIndex === 'number') {
+                const planMessageId = ensurePlanMessage()
+                const stream = delta.stream ?? 'text'
+                if (stream === 'thinking') {
+                  return
+                }
+                updateMessage(setMessages, planMessageId, (message) => {
+                  const existing = message.planDetails?.[todoIndex] ?? {
+                    todoIndex,
+                    stepId: delta.stepId,
+                    content: '',
+                  }
+                  const nextDetail = {
+                    ...existing,
+                    content: existing.content + delta.content,
+                  }
+
+                  return {
+                    ...message,
+                    expandedPlanTaskIndexes: message.expandedPlanTaskIndexes?.includes(todoIndex)
+                      ? message.expandedPlanTaskIndexes
+                      : [...(message.expandedPlanTaskIndexes ?? []), todoIndex].sort((a, b) => a - b),
+                    planDetails: {
+                      ...(message.planDetails ?? {}),
+                      [todoIndex]: nextDetail,
+                    },
+                  }
+                })
+              }
+              return
+            }
+
             const messageId = ensureStepMessage(delta.stepId, delta.kind)
+            if (!messageId) return
             const stream = delta.stream ?? 'text'
             updateMessage(setMessages, messageId, (message) => {
               if (stream === 'thinking') {
@@ -234,21 +384,12 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
 
           if (event === 'todo_state') {
             const todo = payload as ServerEventPayloadMap['todo_state']
-            if (!todoMessageIdRef.current) {
-              todoMessageIdRef.current = createId('todo')
-              appendMessage(setMessages, {
-                id: todoMessageIdRef.current,
-                role: 'event',
-                content: renderTodo(todo.items),
-                timestamp: Date.now(),
-                eventType: 'todo',
-              })
-            } else {
-              updateMessage(setMessages, todoMessageIdRef.current, (message) => ({
-                ...message,
-                content: renderTodo(todo.items),
-              }))
-            }
+            const planMessageId = ensurePlanMessage()
+            updateMessage(setMessages, planMessageId, (message) => ({
+              ...message,
+              content: renderTodo(todo.items),
+              todoItems: todo.items,
+            }))
             onWsEvent?.(event, todo)
             return
           }
@@ -270,6 +411,17 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
           }
 
           if (event === 'tool_state') {
+            const tool = payload as ServerEventPayloadMap['tool_state']
+            if (tool.status === 'end' && tool.isError) {
+              appendMessage(setMessages, {
+                id: createId('tool_error'),
+                role: 'event',
+                content: formatToolFailureMessage(tool.toolName, tool.detail ?? tool.summary),
+                timestamp: Date.now(),
+                eventType: 'tool_error',
+              })
+            }
+            onWsEvent?.(event, tool)
             return
           }
 
@@ -321,7 +473,7 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
 
     reconnectWsRef.current = ws
     return ws
-  }, [WS_BASE, ensureStepMessage, onWsEvent])
+  }, [WS_BASE, ensurePlanMessage, ensureStepMessage, onWsEvent])
 
   const buildModelOptions = useCallback(() => ({
     model: modelConfig.model,
@@ -329,12 +481,11 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
     apiKey: modelConfig.apiKey || undefined,
     enableTools: modelConfig.enableTools,
     thinking: modelConfig.thinking,
-    systemPrompt: systemPrompt.trim() || undefined,
     options: {
       temperature: modelConfig.temperature,
       maxTokens: modelConfig.maxTokens,
     },
-  }), [modelConfig, systemPrompt])
+  }), [modelConfig])
 
   const send = useCallback((text: string) => {
     const input = text.trim()
@@ -352,16 +503,33 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
       timestamp: Date.now(),
     })
 
+    const isPlanResume = Boolean(
+      isWaiting &&
+      mode === 'plan' &&
+      boundSessionKey &&
+      currentRunIdRef.current &&
+      currentPauseIdRef.current,
+    )
+
     stepMessageIdsRef.current.clear()
-    todoMessageIdRef.current = null
+    stepMetaRef.current.clear()
+    if (!isPlanResume) {
+      todoMessageIdRef.current = null
+      if (mode === 'plan') {
+        ensurePlanMessage()
+      }
+    }
     setIsStreaming(true)
     setIsWaiting(false)
 
-    if (isWaiting && mode === 'plan' && boundSessionKey && currentRunIdRef.current && currentPauseIdRef.current) {
+    if (isPlanResume) {
+      const sessionKey = boundSessionKey!
+      const runId = currentRunIdRef.current!
+      const pauseId = currentPauseIdRef.current!
       const payload: ClientEventPayloadMap['run_resume'] = {
-        sessionKey: boundSessionKey,
-        runId: currentRunIdRef.current,
-        pauseId: currentPauseIdRef.current,
+        sessionKey,
+        runId,
+        pauseId,
         input,
         ...buildModelOptions(),
       }
@@ -404,6 +572,8 @@ export function useChat({ systemPrompt, modelConfig, peerId, currentSessionKey, 
     replaceMessages,
     clearMessages,
     toggleThinking,
+    toggleTodo,
+    togglePlanTask,
     send,
     stop,
     isStreaming,

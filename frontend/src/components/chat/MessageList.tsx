@@ -8,6 +8,8 @@ interface MessageListProps {
   isWaiting: boolean
   onResendUser?: (message: string) => void
   onToggleThinking?: (messageId: string) => void
+  onToggleTodo?: (messageId: string) => void
+  onTogglePlanTask?: (messageId: string, todoIndex: number) => void
   scrollRequestVersion?: number
 }
 
@@ -20,6 +22,8 @@ export function MessageList({
   isWaiting,
   onResendUser,
   onToggleThinking,
+  onToggleTodo,
+  onTogglePlanTask,
   scrollRequestVersion = 0,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -140,14 +144,11 @@ export function MessageList({
             message={message}
             onResendUser={onResendUser}
             onToggleThinking={onToggleThinking}
+            onToggleTodo={onToggleTodo}
+            onTogglePlanTask={onTogglePlanTask}
           />
         ))}
       </div>
-      {(isStreaming || isWaiting) && (
-        <div className="mx-auto w-full max-w-3xl text-xs text-text-muted">
-          {isWaiting ? '等待用户补充信息…' : '正在生成…'}
-        </div>
-      )}
       <div ref={bottomAnchorRef} aria-hidden="true" className="h-px w-full shrink-0" />
     </div>
   )

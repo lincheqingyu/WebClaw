@@ -11,6 +11,7 @@ import type {
   SerializedTodoItem,
   ServerEventPayloadMap,
   SessionEntry,
+  SessionEventEntry,
   SessionMessageRecord,
   SessionMode,
   SessionProjection,
@@ -87,6 +88,13 @@ export interface SpawnTaskResult {
 function summarizeContent(content: unknown): string {
   const text = extractSessionText(content).trim()
   return text.length > 240 ? `${text.slice(0, 240)}...` : text
+}
+
+function summarizeToolResultDetail(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') return undefined
+  const content = 'content' in result ? (result as { content?: unknown }).content : undefined
+  const summary = summarizeContent(content)
+  return summary.length > 0 ? summary : undefined
 }
 
 function lastAssistantText(messages: AgentMessage[]): string {
@@ -353,6 +361,17 @@ export class SessionRuntimeService {
     return snapshot.messages
   }
 
+  async historyView(sessionKeyOrSessionId: string): Promise<{ projection: SessionProjection; entries: SessionEventEntry[] }> {
+    const projection = this.findProjection(sessionKeyOrSessionId)
+    if (!projection) throw new Error(`会话不存在: ${sessionKeyOrSessionId}`)
+    const latest = await this.refreshProjection(projection.key)
+    const manager = this.getOrCreateManager(latest.key, latest)
+    return {
+      projection: latest,
+      entries: manager.getEntries(),
+    }
+  }
+
   async getSession(sessionKeyOrSessionId: string): Promise<SessionDetail | null> {
     const projection = this.findProjection(sessionKeyOrSessionId)
     if (!projection) return null
@@ -596,7 +615,7 @@ export class SessionRuntimeService {
     stepId: StepId | undefined,
     status: 'start' | 'end',
     toolName: string,
-    extra: { args?: unknown; summary?: string; isError?: boolean } = {},
+    extra: { args?: unknown; summary?: string; detail?: string; isError?: boolean } = {},
   ): void {
     this.notify(sessionKey, 'tool_state', {
       sessionKey,
@@ -606,6 +625,7 @@ export class SessionRuntimeService {
       status,
       args: extra.args,
       summary: extra.summary,
+      detail: extra.detail,
       isError: extra.isError,
     })
   }
@@ -648,7 +668,18 @@ export class SessionRuntimeService {
 
     try {
       if (mode === 'simple') {
-        const reply = await this.executeSimple(bound, runId, userMessage, contextBeforeInput, model, apiKey, modelOptions, abortController.signal, thinkingLevel)
+        const reply = await this.executeSimple(
+          bound,
+          runId,
+          userMessage,
+          contextBeforeInput,
+          model,
+          apiKey,
+          modelOptions,
+          abortController.signal,
+          thinkingLevel,
+          'simple',
+        )
         manager.appendRunFinished(runId, 'completed')
         latestProjection = await this.refreshProjection(sessionKey)
         this.emitRunState(sessionKey, latestProjection, runId, mode, 'completed')
@@ -667,6 +698,7 @@ export class SessionRuntimeService {
       return reply
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      logger.error('会话运行失败', { sessionKey, runId, mode, error: message })
       manager.appendRunFinished(runId, abortController.signal.aborted ? 'cancelled' : 'failed', message)
       latestProjection = await this.refreshProjection(sessionKey)
       this.emitRunState(sessionKey, latestProjection, runId, mode, abortController.signal.aborted ? 'cancelled' : 'failed', message)
@@ -693,6 +725,7 @@ export class SessionRuntimeService {
     modelOptions: ClientModelOptions & { systemPrompt?: string },
     signal: AbortSignal,
     thinkingLevel: ReturnType<typeof resolveThinkingLevel>,
+    mode: SessionMode = 'simple',
   ): Promise<string> {
     const step: StepLifecycle = {
       stepId: createStepId(),
@@ -721,6 +754,8 @@ export class SessionRuntimeService {
       extraSystemPrompt: modelOptions.systemPrompt,
       signal,
       enableTools: modelOptions.enableTools ?? false,
+      route: bound.projection.route,
+      mode,
       onEvent: (event) => {
         this.handleAgentEvent(sessionKey, runId, step, event)
       },
@@ -785,6 +820,7 @@ export class SessionRuntimeService {
         extraSystemPrompt: modelOptions.systemPrompt,
         signal,
         todoManager,
+        route: bound.projection.route,
         onEvent: (event) => {
           this.handleAgentEvent(sessionKey, runId, plannerStep, event)
         },
@@ -873,6 +909,7 @@ export class SessionRuntimeService {
         temperature: modelOptions.options?.temperature,
         extraSystemPrompt: modelOptions.systemPrompt,
         signal,
+        route: bound.projection.route,
         onEvent: (event) => {
           this.handleAgentEvent(sessionKey, runId, step, event)
         },
@@ -917,7 +954,34 @@ export class SessionRuntimeService {
       this.emitStepState(sessionKey, runId, step, 'completed', workerResult.result)
     }
 
-    return '计划执行完成'
+    const finalContextMessages = bound.manager.buildSessionContext().messages
+    const finalPrompt: SessionMessageRecord = {
+      role: 'user',
+      content: '请基于刚刚完成的计划执行结果，直接给用户最终答复。不要再展示 todo、内部步骤或执行日志，只输出面向用户的结论、结果与必要说明。',
+      timestamp: Date.now(),
+    }
+
+    return await this.executeSimple(
+      bound,
+      runId,
+      finalPrompt,
+      finalContextMessages,
+      model,
+      apiKey,
+      {
+        ...modelOptions,
+        enableTools: false,
+        systemPrompt: [
+          modelOptions.systemPrompt?.trim(),
+          '你正在完成 plan 工作流的最终答复阶段。整合已完成任务的结果，直接回答用户，不再重新规划，也不要暴露内部工作过程。',
+        ]
+          .filter((part): part is string => Boolean(part && part.length > 0))
+          .join('\n\n'),
+      },
+      signal,
+      thinkingLevel,
+      'plan',
+    )
   }
 
   private handleAgentEvent(
@@ -939,13 +1003,42 @@ export class SessionRuntimeService {
     }
 
     if (event.type === 'tool_execution_start') {
+      logger.debug('工具开始执行', {
+        sessionKey,
+        runId,
+        stepId: step.stepId,
+        stepKind: step.kind,
+        toolName: event.toolName,
+        args: event.args,
+      })
       this.emitToolState(sessionKey, runId, step.stepId, 'start', event.toolName, { args: event.args })
       return
     }
 
     if (event.type === 'tool_execution_end') {
+      const detail = summarizeToolResultDetail(event.result)
+      if (event.isError) {
+        logger.warn('工具执行失败', {
+          sessionKey,
+          runId,
+          stepId: step.stepId,
+          stepKind: step.kind,
+          toolName: event.toolName,
+          detail,
+        })
+      } else {
+        logger.debug('工具执行完成', {
+          sessionKey,
+          runId,
+          stepId: step.stepId,
+          stepKind: step.kind,
+          toolName: event.toolName,
+          detail,
+        })
+      }
       this.emitToolState(sessionKey, runId, step.stepId, 'end', event.toolName, {
         summary: event.isError ? 'tool error' : 'tool completed',
+        detail,
         isError: event.isError,
       })
     }

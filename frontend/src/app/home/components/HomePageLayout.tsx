@@ -15,48 +15,21 @@ import type {
 } from '../../../hooks/useChat'
 import {
   deleteSession as deleteSessionByKey,
-  fetchSessionHistory,
+  fetchSessionHistoryView,
   fetchSessions,
   updateSessionTitle,
 } from '../../../lib/session-api'
 import {
-  toChatMessages,
+  toChatMessagesFromHistoryView,
   toSessionListItemVm,
   type SessionListItemVm,
 } from '../../../lib/session-management'
 import { getPeerId, resetPeerId, setPeerId } from '../../../lib/session'
 
-interface SystemPromptItem {
-  id: string
-  title: string
-  prompt: string
-}
-
 const STORAGE_KEYS = {
-  prompts: 'webclaw.systemPrompts',
-  activePromptId: 'webclaw.activePromptId',
   modelConfig: 'webclaw.modelConfig',
   sidebarCollapsed: 'webclaw.sidebarCollapsed',
   themeMode: 'webclaw.themeMode',
-}
-
-function loadPrompts(): SystemPromptItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.prompts)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadActivePromptId(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.activePromptId)
-  } catch {
-    return null
-  }
 }
 
 function loadModelConfig(): ModelConfig {
@@ -129,8 +102,6 @@ export function HomePageLayout() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isDark, setIsDark] = useState<boolean>(() => loadThemeMode())
-  const [systemPrompts, setSystemPrompts] = useState<SystemPromptItem[]>(() => loadPrompts())
-  const [activePromptId, setActivePromptId] = useState<string | null>(() => loadActivePromptId())
   const [modelConfig, setModelConfig] = useState<ModelConfig>(() => loadModelConfig())
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed())
 
@@ -158,28 +129,12 @@ export function HomePageLayout() {
   }, [isDark])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.prompts, JSON.stringify(systemPrompts))
-  }, [systemPrompts])
-
-  useEffect(() => {
-    if (activePromptId) {
-      localStorage.setItem(STORAGE_KEYS.activePromptId, activePromptId)
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.activePromptId)
-    }
-  }, [activePromptId])
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.modelConfig, JSON.stringify(modelConfig))
   }, [modelConfig])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, isSidebarCollapsed ? '1' : '0')
   }, [isSidebarCollapsed])
-
-  const activePrompt = useMemo(() => {
-    return systemPrompts.find((p) => p.id === activePromptId) ?? null
-  }, [systemPrompts, activePromptId])
 
   const activeSession = useMemo(() => {
     const targetKey = selectedSessionKey ?? currentSessionKey
@@ -234,8 +189,8 @@ export function HomePageLayout() {
     setSessionError(null)
 
     try {
-      const history = await fetchSessionHistory(sessionKey)
-      replaceMessageSeed(toChatMessages(history))
+      const history = await fetchSessionHistoryView(sessionKey)
+      replaceMessageSeed(toChatMessagesFromHistoryView(history.projection, history.entries))
 
       const peerId = target?.peerId ?? null
       if (!peerId) {
@@ -365,7 +320,6 @@ export function HomePageLayout() {
             onSettingsToggle={() => setIsSettingsOpen((prev) => !prev)}
             isDark={isDark}
             onThemeToggle={() => setIsDark((prev) => !prev)}
-            systemPrompt={activePrompt?.prompt ?? ''}
             modelConfig={modelConfig}
             conversationTitle={conversationTitle}
             sessionMetaText={sessionMetaText}
@@ -384,10 +338,6 @@ export function HomePageLayout() {
       <SettingsDrawer
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        systemPrompts={systemPrompts}
-        activePromptId={activePromptId}
-        onSystemPromptsChange={setSystemPrompts}
-        onActivePromptChange={setActivePromptId}
         modelConfig={modelConfig}
         onModelConfigChange={setModelConfig}
       />

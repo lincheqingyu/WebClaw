@@ -95,8 +95,13 @@ function createContextUserMessage(text: string, timestamp: string): UserMessage 
   }
 }
 
-function createContextAssistantMessage(record: SessionMessageRecord, timestamp: string): AssistantMessage {
+function createContextAssistantMessage(record: SessionMessageRecord, timestamp: string): AssistantMessage | null {
   const content = normalizeSessionAssistantContent(record.content)
+    .filter((part) => part.type === 'text')
+
+  if (content.length === 0) {
+    return null
+  }
 
   const raw = record as Partial<AssistantMessage> & { provider?: string; model?: string }
   return {

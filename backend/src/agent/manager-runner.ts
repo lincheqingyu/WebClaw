@@ -4,10 +4,16 @@
 
 import type { Model, Message } from '@mariozechner/pi-ai'
 import { agentLoop, type AgentEvent, type AgentMessage } from '@mariozechner/pi-agent-core'
-import type { ThinkingLevel } from '@webclaw/shared'
+import type { SessionRouteContext, ThinkingLevel } from '@webclaw/shared'
 import { buildManagerPrompt } from '../core/prompts/system-prompts.js'
 import { createManagerTools } from './tools/index.js'
-import { createTracker, MAX_ITERATIONS, MAX_TOOL_FAILURES } from './types.js'
+import {
+  createTracker,
+  extractToolResultText,
+  formatAgentFailureMessage,
+  MAX_ITERATIONS,
+  MAX_TOOL_FAILURES,
+} from './types.js'
 import type { TodoManager } from '../core/todo/todo-manager.js'
 import { logger } from '../utils/logger.js'
 
@@ -22,6 +28,7 @@ export interface ManagerAgentOptions {
   onEvent?: (event: AgentEvent) => void
   contextMessages?: AgentMessage[]
   todoManager: TodoManager
+  route?: SessionRouteContext
 }
 
 export interface ManagerAgentResult {
@@ -45,13 +52,20 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
     todoManager,
   } = options
 
-  const baseSystemPrompt = buildManagerPrompt()
-  const systemPrompt = [baseSystemPrompt, extraSystemPrompt?.trim()]
-    .filter((part): part is string => Boolean(part && part.length > 0))
-    .join('\n\n')
-
   const tools = createManagerTools(todoManager)
+  const systemPrompt = await buildManagerPrompt({
+    mode: 'plan',
+    route: options.route,
+    modelId: model.id,
+    thinkingLevel,
+    tools,
+    extraInstructions: extraSystemPrompt,
+  })
   const tracker = createTracker()
+  let forcedStopReason: string | undefined
+  let stopInstructionIssued = false
+  let lastToolError: string | undefined
+  let lastAssistantMessage: (AgentMessage & { stopReason?: string; errorMessage?: string }) | null = null
 
   const abortController = new AbortController()
   const combinedSignal = signal
@@ -79,12 +93,20 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
             ? `已达到最大迭代次数(${MAX_ITERATIONS}次)`
             : `工具连续失败次数过多(${MAX_TOOL_FAILURES}次)`
 
+          forcedStopReason = reason
           logger.warn(`Manager 超限停止: ${reason}`)
-          abortController.abort()
+          if (stopInstructionIssued) {
+            abortController.abort()
+            return []
+          }
+          stopInstructionIssued = true
           return [
             {
               role: 'user' as const,
-              content: [{ type: 'text' as const, text: `${reason}，请停止调用工具并输出规划结果。` }],
+              content: [{
+                type: 'text' as const,
+                text: `${reason}，请停止调用工具并输出规划结果。${lastToolError ? `最近一次工具错误：${lastToolError}` : ''}`,
+              }],
               timestamp: Date.now(),
             },
           ]
@@ -104,6 +126,7 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
     }
     if (event.type === 'tool_execution_end' && event.isError) {
       tracker.toolFailCount++
+      lastToolError = extractToolResultText(event.result)
     }
 
     if (event.type === 'message_update' && event.assistantMessageEvent.type === 'toolcall_end') {
@@ -115,9 +138,19 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
 
     if (event.type === 'message_end') {
       allMessages.push(event.message)
+      if (event.message.role === 'assistant') {
+        lastAssistantMessage = event.message as AgentMessage & { stopReason?: string; errorMessage?: string }
+      }
     }
 
     onEvent?.(event)
+  }
+
+  if (lastAssistantMessage?.stopReason === 'error' || lastAssistantMessage?.stopReason === 'aborted') {
+    throw new Error(formatAgentFailureMessage(
+      lastAssistantMessage.errorMessage ?? forcedStopReason ?? '计划生成失败',
+      lastToolError,
+    ))
   }
 
   return {

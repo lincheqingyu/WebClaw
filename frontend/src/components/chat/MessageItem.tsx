@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import { Check, ChevronDown, ChevronUp, Copy, RotateCcw, Sparkles } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { Check, ChevronDown, ChevronUp, Copy, ListTodo, RotateCcw, Sparkles } from 'lucide-react'
+import { useState, type FocusEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../../hooks/useChat'
 
 interface MessageItemProps {
   message: ChatMessage
   onResendUser?: (message: string) => void
   onToggleThinking?: (messageId: string) => void
+  onToggleTodo?: (messageId: string) => void
+  onTogglePlanTask?: (messageId: string, todoIndex: number) => void
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
@@ -481,7 +483,43 @@ function renderMarkdown(text: string): ReactNode {
   )
 }
 
-export function MessageItem({ message, onResendUser, onToggleThinking }: MessageItemProps) {
+function summarizeTodo(items: NonNullable<ChatMessage['todoItems']>) {
+  const completed = items.filter((item) => item.status === 'completed').length
+  const inProgress = items.filter((item) => item.status === 'in_progress').length
+  const total = items.length
+  return {
+    label: `已完成 ${completed}/${total} 步`,
+    detail: inProgress > 0 ? `进行中 ${inProgress} 项` : total === completed ? '全部已完成' : '等待执行',
+  }
+}
+
+function currentTodoFocus(items: NonNullable<ChatMessage['todoItems']>) {
+  const active = items.find((item) => item.status === 'in_progress') ?? items.find((item) => item.status === 'pending')
+  return active?.content ?? null
+}
+
+function getEventLabel(eventType?: string) {
+  if (!eventType) return null
+
+  switch (eventType) {
+    case 'pause':
+      return '需要你补充信息'
+    case 'tool_error':
+      return '执行异常'
+    case 'session_tool_result':
+      return '会话操作'
+    default:
+      return null
+  }
+}
+
+export function MessageItem({
+  message,
+  onResendUser,
+  onToggleThinking,
+  onToggleTodo,
+  onTogglePlanTask,
+}: MessageItemProps) {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
   const isEvent = message.role === 'event'
@@ -489,7 +527,125 @@ export function MessageItem({ message, onResendUser, onToggleThinking }: Message
   const hasThinkingContent = Boolean(message.hasThinking && message.thinkingContent?.trim())
   const showThoughtsCard = Boolean((isAssistant || isEvent) && hasThinkingContent)
   const canCopyMessage = message.content.trim().length > 0
+  const todoItems = message.todoItems ?? []
+  const planDetails = message.planDetails ?? {}
+  const isPlanPanel = isEvent && (message.eventType === 'plan' || message.eventType === 'todo')
+  const eventLabel = getEventLabel(message.eventType)
   const [copied, setCopied] = useState(false)
+  const [isActionBarHovered, setIsActionBarHovered] = useState(false)
+  const [isActionBarFocused, setIsActionBarFocused] = useState(false)
+  const isActionBarVisible = isActionBarHovered || isActionBarFocused
+
+  if (isAssistant && !hasPrimaryContent && !showThoughtsCard) {
+    return null
+  }
+
+  if (isPlanPanel) {
+    const summary = summarizeTodo(todoItems)
+    const focus = currentTodoFocus(todoItems)
+    const completed = todoItems.filter((item) => item.status === 'completed').length
+    const total = todoItems.length
+    const headerStatus = total === 0 ? '正在生成计划' : `${completed}/${total}`
+    const headerDetail =
+      total === 0
+        ? '正在拆解任务...'
+        : focus
+          ? `当前：${focus}`
+          : summary.detail
+
+    return (
+      <div className="flex w-full justify-start">
+        <div className="w-full overflow-hidden rounded-[1.35rem] border border-border bg-surface-thought">
+          <button
+            type="button"
+            onClick={() => onToggleTodo?.(message.id)}
+            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-hover/60"
+            aria-expanded={message.isTodoExpanded}
+            aria-label={message.isTodoExpanded ? '收起计划步骤' : '展开计划步骤'}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-alt text-accent-text">
+                <ListTodo className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-text-primary">Plan</div>
+                <div className="mt-0.5 text-xs text-text-secondary">{headerDetail}</div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-sm text-text-secondary">
+              <span>{headerStatus}</span>
+              {message.isTodoExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </div>
+          </button>
+
+          {message.isTodoExpanded && (
+            <div className="border-t border-border bg-surface-alt px-4 py-4">
+              {todoItems.length === 0 ? (
+                <div className="text-sm text-text-secondary">正在生成任务列表...</div>
+              ) : (
+                <div className="space-y-4">
+                  {todoItems.map((item, index) => {
+                    const detail = planDetails[index]
+                    const taskSummary = detail?.content?.trim() || item.result?.trim() || ''
+                    const hasTaskSummary = Boolean(taskSummary)
+                    const isTaskExpanded = message.expandedPlanTaskIndexes?.includes(index) ?? false
+
+                    return (
+                      <div key={`${item.content}_${index}`} className="overflow-hidden rounded-[1.1rem] border border-border/80 bg-surface-thought">
+                        <button
+                          type="button"
+                          onClick={() => onTogglePlanTask?.(message.id, index)}
+                          className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-hover/35"
+                          aria-expanded={isTaskExpanded}
+                          aria-label={isTaskExpanded ? '收起任务详情' : '展开任务详情'}
+                        >
+                          <span className={clsx(
+                            'mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold',
+                            item.status === 'completed' && 'border-border bg-surface-thought text-text-primary',
+                            item.status === 'in_progress' && 'border-accent text-accent-text',
+                            item.status === 'pending' && 'border-border text-text-muted',
+                          )}>
+                            {item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '>' : ''}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className={clsx(
+                              'text-sm leading-relaxed',
+                              item.status === 'completed' ? 'text-text-primary' : item.status === 'in_progress' ? 'font-medium text-text-primary' : 'text-text-secondary',
+                            )}>
+                              {item.content}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 pt-0.5 text-sm text-text-secondary">
+                            {isTaskExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                          </div>
+                        </button>
+
+                        {isTaskExpanded && (
+                          <div className="border-t border-border/80 px-4 py-3">
+                            {hasTaskSummary ? (
+                              <div className="space-y-3">
+                                <div className="px-1 text-text-primary">
+                                  {renderMarkdown(taskSummary)}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-text-secondary">
+                                {item.status === 'pending' ? '等待执行' : item.status === 'in_progress' ? '正在执行...' : '已完成'}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const handleCopy = async () => {
     try {
@@ -501,6 +657,14 @@ export function MessageItem({ message, onResendUser, onToggleThinking }: Message
     }
   }
 
+  const handleActionAreaBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const nextFocusTarget = event.relatedTarget
+    if (nextFocusTarget instanceof Node && event.currentTarget.contains(nextFocusTarget)) {
+      return
+    }
+    setIsActionBarFocused(false)
+  }
+
   return (
     <div
       className={clsx(
@@ -508,24 +672,30 @@ export function MessageItem({ message, onResendUser, onToggleThinking }: Message
         isUser ? 'justify-end' : 'justify-start',
       )}
     >
-      <div className={clsx('group/message relative flex flex-col', canCopyMessage && 'pb-0', isUser ? 'max-w-[88%]' : 'w-full')}>
+      <div
+        className={clsx('inline-flex flex-col', isUser ? 'max-w-[88%] items-end' : 'max-w-full')}
+        onPointerEnter={() => setIsActionBarHovered(true)}
+        onPointerLeave={() => setIsActionBarHovered(false)}
+        onFocusCapture={() => setIsActionBarFocused(true)}
+        onBlur={handleActionAreaBlur}
+      >
         <div
           className={clsx(
             'rounded-2xl px-4 py-2 text-sm leading-relaxed',
             isUser && 'w-fit bg-hover text-text-primary border border-border/70',
-            isAssistant && 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1',
-            isEvent && 'bg-hover text-text-secondary border border-border',
+            isAssistant && 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1',
+            isEvent && 'bg-surface text-text-secondary border border-border/80',
             message.role === 'system' && 'bg-hover text-text-secondary border border-border',
           )}
         >
-          {isEvent && message.eventType && (
+          {isEvent && eventLabel && (
             <div className="mb-1 text-xs uppercase tracking-wide text-text-muted">
-              {message.eventType}
+              {eventLabel}
             </div>
           )}
 
           {showThoughtsCard && (
-            <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-border bg-surface-alt">
+            <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-border bg-surface-thought">
               <button
                 type="button"
                 onClick={() => onToggleThinking?.(message.id)}
@@ -534,13 +704,13 @@ export function MessageItem({ message, onResendUser, onToggleThinking }: Message
                 aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
               >
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-alt text-accent-text">
+                  <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-thought text-accent-text">
                     <Sparkles className="size-3.5" />
                   </span>
                   <span className="text-sm font-semibold text-text-primary">Thoughts</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-text-secondary">
-                  <span>{message.isThinkingExpanded ? '隐藏模型思考' : '展开查看模型思考'}</span>
+                  <span>{message.isThinkingExpanded ? '收起思考' : '展开思考'}</span>
                   {message.isThinkingExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                 </div>
               </button>
@@ -564,32 +734,39 @@ export function MessageItem({ message, onResendUser, onToggleThinking }: Message
         {(isUser || isAssistant) && canCopyMessage && (
           <div
             className={clsx(
-              'absolute top-full mt-0 flex items-center gap-1 invisible opacity-0 pointer-events-none',
-              'group-hover/message:visible group-hover/message:opacity-100 group-hover/message:pointer-events-auto',
-              'group-focus-within/message:visible group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto',
-              isUser ? 'right-0 justify-end' : 'left-2 justify-start',
+              'mt-0.5 flex h-7 items-center',
+              isUser ? 'justify-end pr-0.5' : 'justify-start pl-1',
             )}
           >
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-surface-alt text-black transition-colors hover:bg-surface"
-              aria-label="复制消息"
-              title="复制消息"
+            <div
+              className={clsx(
+                'flex items-center gap-1 transition-opacity duration-150',
+                isActionBarVisible
+                  ? 'visible opacity-100 pointer-events-auto'
+                  : 'invisible opacity-0 pointer-events-none',
+              )}
             >
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-            </button>
-            {isUser && onResendUser && (
               <button
                 type="button"
-                onClick={() => onResendUser(message.content)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-surface-alt text-black transition-colors hover:bg-surface"
-                aria-label="重新发送问题"
-                title="重新发送问题"
+                onClick={handleCopy}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-surface-alt text-text-primary transition-colors hover:bg-surface dark:text-white"
+                aria-label="复制消息"
+                title="复制消息"
               >
-                <RotateCcw className="size-3.5" />
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
               </button>
-            )}
+              {isUser && onResendUser && (
+                <button
+                  type="button"
+                  onClick={() => onResendUser(message.content)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-surface-alt text-text-primary transition-colors hover:bg-surface dark:text-white"
+                  aria-label="重新发送问题"
+                  title="重新发送问题"
+                >
+                  <RotateCcw className="size-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

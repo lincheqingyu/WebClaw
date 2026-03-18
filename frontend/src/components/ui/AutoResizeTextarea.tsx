@@ -42,17 +42,18 @@ export function AutoResizeTextarea({
 }: AutoResizeTextareaProps) {
   const textareaRef = useAutoResize(value, maxRows, onLayoutChange)
 
-  /** 键盘事件：Enter 发送，Ctrl+Enter 换行，Ctrl+P 切换模式 */
+  /** 键盘事件：Enter 发送，Shift+Enter 换行，Shift+Tab 切换模式 */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (disabled) return
-    if (e.key === 'Enter' && !e.ctrlKey) {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault()
+      onToggleThinking()
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault()
       onSend()
       return
-    }
-    if (e.key.toLowerCase() === 'p' && e.ctrlKey) {
-      e.preventDefault()
-      onToggleThinking()
     }
   }
 

@@ -12,5 +12,6 @@ export function buildDefaultRoute(options: BuildRouteOptions): SessionRouteConte
     chatType: 'dm',
     peerId: options.peerId,
     accountId: options.accountId ?? 'default',
+    userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }
 }

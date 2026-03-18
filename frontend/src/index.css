@@ -21,7 +21,8 @@
 @theme {
     /* ---------- 背景色 ---------- */
     --color-surface: #ffffff;               /* 主背景（页面、卡片、抽屉） */
-    --color-surface-alt: #f7f5ef;           /* 应用底色 */
+    --color-surface-alt: #faf9f5;           /* 应用底色 rgb(250, 249, 245) */
+    --color-surface-thought: #fdfcfa;       /* Thoughts / Plan 头部底色 rgb(253, 252, 250) */
     --color-surface-raised: #ffffff;        /* 浮层、输入区、下拉 */
     --color-sidebar-panel: #f7f5ef;         /* 展开侧栏底色 */
     --color-sidebar-hover: #f3f0e8;         /* 侧栏 hover */
@@ -59,6 +60,7 @@
 .dark {
     --color-surface: #222326;
     --color-surface-alt: #1f2023;
+    --color-surface-thought: #26272b;
     --color-surface-raised: #2a2b2f;
     --color-sidebar-panel: #121315;
     --color-sidebar-hover: #232427;

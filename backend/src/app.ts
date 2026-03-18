@@ -13,6 +13,7 @@ import { errorHandler } from './middlewares/error-handler.js'
 import { healthRouter } from './controllers/health.js'
 import { modelsRouter } from './controllers/models.js'
 import { memoryRouter } from './controllers/memory.js'
+import { contextRouter } from './controllers/context.js'
 import { sessionsRouter } from './controllers/sessions.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -28,6 +29,7 @@ export function createApp(): express.Express {
   // 路由
   app.use(healthRouter)
   app.use('/api/v1', modelsRouter)
+  app.use('/api/v1', contextRouter)
   app.use('/api/v1', memoryRouter)
   app.use('/api/v1', sessionsRouter)
 
