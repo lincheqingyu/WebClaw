@@ -21,11 +21,12 @@ import {
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import type { AssistantMessage, UserMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage, ImageContent, TextContent, UserMessage } from '@mariozechner/pi-ai'
 import {
   createSessionId,
   extractSessionText,
   normalizeSessionAssistantContent,
+  normalizeSessionUserContent,
 } from '@webclaw/shared'
 import type {
   BranchSummaryEntry,
@@ -87,10 +88,44 @@ function toIsoTimestamp(input?: number | string): string {
   return new Date(input ?? Date.now()).toISOString()
 }
 
-function createContextUserMessage(text: string, timestamp: string): UserMessage {
+function createContextUserMessage(content: SessionMessageRecord['content'], timestamp: string): UserMessage {
+  const blocks = normalizeSessionUserContent(content)
+  if (blocks.length === 0) {
+    return {
+      role: 'user',
+      content: '',
+      timestamp: new Date(timestamp).getTime(),
+    }
+  }
+
+  const llmContent: Array<TextContent | ImageContent> = []
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      llmContent.push({ type: 'text', text: block.text })
+      continue
+    }
+    if (block.type === 'image') {
+      llmContent.push({ type: 'image', data: block.data, mimeType: block.mimeType })
+      continue
+    }
+    llmContent.push({
+      type: 'text',
+      text: [
+        `附件文件：${block.name}`,
+        `MIME 类型：${block.mimeType}`,
+        block.truncated ? '注意：文件内容已截断。' : '',
+        '',
+        block.text,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    })
+  }
+
   return {
     role: 'user',
-    content: text,
+    content: llmContent,
     timestamp: new Date(timestamp).getTime(),
   }
 }
@@ -138,14 +173,13 @@ function createBranchSummaryMessage(entry: BranchSummaryEntry): UserMessage {
 }
 
 function createCustomMessage(entry: CustomMessageEntry): UserMessage {
-  const text = extractSessionText(entry.content)
-  return createContextUserMessage(text, entry.timestamp)
+  return createContextUserMessage(extractSessionText(entry.content), entry.timestamp)
 }
 
 function toAgentMessage(record: SessionMessageRecord, timestamp: string): AgentMessage | null {
   if (record.role === 'user') {
     return createContextUserMessage(
-      extractSessionText(record.content),
+      record.content,
       timestamp,
     )
   }

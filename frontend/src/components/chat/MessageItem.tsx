@@ -1,7 +1,8 @@
 import clsx from 'clsx'
-import { Check, ChevronDown, ChevronUp, Copy, ListTodo, RotateCcw, Sparkles } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, FileText, ListTodo, RotateCcw, Sparkles } from 'lucide-react'
 import { useState, type FocusEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../../hooks/useChat'
+import { buildAttachmentPreviewUrl } from '../../lib/chat-attachments'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -535,6 +536,7 @@ export function MessageItem({
   const [isActionBarHovered, setIsActionBarHovered] = useState(false)
   const [isActionBarFocused, setIsActionBarFocused] = useState(false)
   const isActionBarVisible = isActionBarHovered || isActionBarFocused
+  const attachments = message.attachments ?? []
 
   if (isAssistant && !hasPrimaryContent && !showThoughtsCard) {
     return null
@@ -665,6 +667,50 @@ export function MessageItem({
     setIsActionBarFocused(false)
   }
 
+  const renderAttachments = () => {
+    if (attachments.length === 0) return null
+
+    return (
+      <div className="mb-3 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {attachments.map((attachment, index) => (
+            attachment.kind === 'image' ? (
+              <div
+                key={`${attachment.name}_${index}`}
+                className="overflow-hidden rounded-[1.1rem] border border-border bg-surface-thought shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
+              >
+                <img
+                  src={buildAttachmentPreviewUrl(attachment) ?? ''}
+                  alt={attachment.name}
+                  className="h-32 w-32 object-cover md:h-40 md:w-40"
+                />
+                <div className="border-t border-border/70 px-3 py-2">
+                  <div className="truncate text-xs font-medium text-text-primary">{attachment.name}</div>
+                </div>
+              </div>
+            ) : (
+              <div
+                key={`${attachment.name}_${index}`}
+                className="flex min-w-[12rem] max-w-[18rem] items-start gap-3 rounded-[1.1rem] border border-border bg-surface-thought px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+              >
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface text-text-secondary">
+                  <FileText className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
+                  <div className="mt-0.5 text-xs text-text-secondary">
+                    {(attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : '文本文件')}
+                    {attachment.truncated ? ' · 已截断' : ''}
+                  </div>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={clsx(
@@ -673,7 +719,10 @@ export function MessageItem({
       )}
     >
       <div
-        className={clsx('inline-flex flex-col', isUser ? 'max-w-[88%] items-end' : 'max-w-full')}
+        className={clsx(
+          'inline-flex flex-col',
+          isUser ? 'max-w-[88%] items-end' : showThoughtsCard ? 'w-full' : 'max-w-full',
+        )}
         onPointerEnter={() => setIsActionBarHovered(true)}
         onPointerLeave={() => setIsActionBarHovered(false)}
         onFocusCapture={() => setIsActionBarFocused(true)}
@@ -683,7 +732,7 @@ export function MessageItem({
           className={clsx(
             'rounded-2xl px-4 py-2 text-sm leading-relaxed',
             isUser && 'w-fit bg-hover text-text-primary border border-border/70',
-            isAssistant && 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1',
+            isAssistant && (showThoughtsCard ? 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1' : 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1'),
             isEvent && 'bg-surface text-text-secondary border border-border/80',
             message.role === 'system' && 'bg-hover text-text-secondary border border-border',
           )}
@@ -723,12 +772,16 @@ export function MessageItem({
             </div>
           )}
 
+          {isUser && renderAttachments()}
+
           {isAssistant ? (
             hasPrimaryContent ? (
               renderMarkdown(message.content)
             ) : null
           ) : (
-            <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+            hasPrimaryContent ? (
+              <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+            ) : null
           )}
         </div>
         {(isUser || isAssistant) && canCopyMessage && (

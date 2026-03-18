@@ -21,6 +21,26 @@ export interface VllmModelOptions {
   thinkingProtocol?: ThinkingProtocol
 }
 
+function supportsVisionInput(modelId: string): boolean {
+  const normalized = modelId.toLowerCase()
+  return [
+    'qwen3.5',
+    'qwen3_5',
+    'qwen3-5',
+    'vision',
+    '-vl',
+    'vl-',
+    'gpt-4o',
+    'gpt-4.1',
+    'gemini',
+    'llava',
+    'internvl',
+    'minicpm-v',
+    'glm-4v',
+    'pixtral',
+  ].some((keyword) => normalized.includes(keyword))
+}
+
 function createCompat(thinkingProtocol: ThinkingProtocol): Model<'openai-completions'>['compat'] {
   const baseCompat: Model<'openai-completions'>['compat'] = {
     supportsStore: false,
@@ -74,7 +94,7 @@ export function createVllmModel(options?: VllmModelOptions): Model<'openai-compl
     provider: 'openai',
     baseUrl,
     reasoning: thinkingProtocol !== 'off',
-    input: ['text'],
+    input: supportsVisionInput(modelId) ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: options?.contextWindow ?? 128_000,
     maxTokens,

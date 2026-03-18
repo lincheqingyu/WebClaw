@@ -56,19 +56,45 @@ export const modelOptionsSchema = z.object({
       .optional(),
 })
 
+const attachmentSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('image'),
+    name: z.string().min(1),
+    mimeType: z.string().min(1),
+    data: z.string().min(1),
+    size: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    kind: z.literal('file'),
+    name: z.string().min(1),
+    mimeType: z.string().min(1),
+    text: z.string(),
+    size: z.number().int().nonnegative().optional(),
+    truncated: z.boolean().optional(),
+  }),
+])
+
 export const runStartSchema = sessionRouteSchema.extend({
   route: sessionRouteSchema.shape.route,
-  input: z.string().min(1, '消息内容不能为空'),
+  input: z.string(),
+  attachments: z.array(attachmentSchema).optional(),
   mode: z.enum(['simple', 'plan']).default('simple'),
   sessionKey: z.string().optional(),
-}).merge(modelOptionsSchema)
+}).merge(modelOptionsSchema).refine(
+  (value) => value.input.trim().length > 0 || (value.attachments?.length ?? 0) > 0,
+  { message: '消息内容或附件至少提供一项' },
+)
 
 export const runResumeSchema = z.object({
   sessionKey: z.string().min(1, 'sessionKey 不能为空'),
   runId: z.string().min(1, 'runId 不能为空'),
   pauseId: z.string().min(1, 'pauseId 不能为空'),
-  input: z.string().min(1, '消息内容不能为空'),
-}).merge(modelOptionsSchema)
+  input: z.string(),
+  attachments: z.array(attachmentSchema).optional(),
+}).merge(modelOptionsSchema).refine(
+  (value) => value.input.trim().length > 0 || (value.attachments?.length ?? 0) > 0,
+  { message: '消息内容或附件至少提供一项' },
+)
 
 export const runCancelSchema = z.object({
   sessionKey: z.string().min(1, 'sessionKey 不能为空'),

@@ -10,14 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@webclaw/shared": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
+    "@webclaw/shared": "workspace:*",
     "clsx": "^2.1.1",
+    "docx-preview": "0.3.7",
     "lucide-react": "^0.563.0",
+    "pdfjs-dist": "^5.4.394",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.4.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

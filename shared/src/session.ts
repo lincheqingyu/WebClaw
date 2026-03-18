@@ -93,6 +93,23 @@ export interface SessionTextContentBlock {
   readonly textSignature?: string
 }
 
+export interface SessionImageContentBlock {
+  readonly type: 'image'
+  readonly data: string
+  readonly mimeType: string
+  readonly name?: string
+  readonly size?: number
+}
+
+export interface SessionFileContentBlock {
+  readonly type: 'file'
+  readonly name: string
+  readonly mimeType: string
+  readonly text: string
+  readonly size?: number
+  readonly truncated?: boolean
+}
+
 export interface SessionThinkingContentBlock {
   readonly type: 'thinking'
   readonly thinking: string
@@ -112,7 +129,17 @@ export type SessionAssistantContentBlock =
   | SessionThinkingContentBlock
   | SessionToolCallContentBlock
 
-export type SessionMessageContent = string | SessionAssistantContentBlock[]
+export type SessionUserContentBlock =
+  | SessionTextContentBlock
+  | SessionImageContentBlock
+  | SessionFileContentBlock
+
+export type SessionContentBlock =
+  | SessionUserContentBlock
+  | SessionThinkingContentBlock
+  | SessionToolCallContentBlock
+
+export type SessionMessageContent = string | SessionContentBlock[]
 
 export interface SessionMessageRecord {
   readonly role: string
@@ -121,6 +148,25 @@ export interface SessionMessageRecord {
   readonly provider?: string
   readonly model?: string
 }
+
+export interface ChatImageAttachment {
+  readonly kind: 'image'
+  readonly name: string
+  readonly mimeType: string
+  readonly data: string
+  readonly size?: number
+}
+
+export interface ChatFileAttachment {
+  readonly kind: 'file'
+  readonly name: string
+  readonly mimeType: string
+  readonly text: string
+  readonly size?: number
+  readonly truncated?: boolean
+}
+
+export type ChatAttachment = ChatImageAttachment | ChatFileAttachment
 
 export interface ThinkingConfig {
   readonly enabled: boolean
@@ -145,6 +191,67 @@ export function resolveThinkingLevel(config?: Partial<ThinkingConfig> | null): T
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
+}
+
+export function normalizeSessionUserContent(content: unknown): SessionUserContentBlock[] {
+  if (typeof content === 'string') {
+    return content.length > 0 ? [{ type: 'text', text: content }] : []
+  }
+
+  if (!Array.isArray(content)) {
+    return []
+  }
+
+  const blocks: SessionUserContentBlock[] = []
+
+  for (const part of content) {
+    if (typeof part === 'string') {
+      if (part.length > 0) {
+        blocks.push({ type: 'text', text: part })
+      }
+      continue
+    }
+
+    if (!isObject(part)) continue
+
+    if (part.type === 'text' && typeof part.text === 'string') {
+      blocks.push({
+        type: 'text',
+        text: part.text,
+        textSignature: typeof part.textSignature === 'string' ? part.textSignature : undefined,
+      })
+      continue
+    }
+
+    if (part.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string') {
+      blocks.push({
+        type: 'image',
+        data: part.data,
+        mimeType: part.mimeType,
+        name: typeof part.name === 'string' ? part.name : undefined,
+        size: typeof part.size === 'number' ? part.size : undefined,
+      })
+      continue
+    }
+
+    if (part.type === 'file' && typeof part.name === 'string' && typeof part.mimeType === 'string' && typeof part.text === 'string') {
+      blocks.push({
+        type: 'file',
+        name: part.name,
+        mimeType: part.mimeType,
+        text: part.text,
+        size: typeof part.size === 'number' ? part.size : undefined,
+        truncated: typeof part.truncated === 'boolean' ? part.truncated : undefined,
+      })
+      continue
+    }
+
+    if (typeof part.text === 'string') {
+      blocks.push({ type: 'text', text: part.text })
+    }
+  }
+
+  return blocks
 }
 
 export function normalizeSessionAssistantContent(content: unknown): SessionAssistantContentBlock[] {
@@ -217,6 +324,7 @@ export function extractSessionText(content: unknown): string {
       if (typeof part === 'string') return part
       if (!isObject(part)) return ''
       if (part.type === 'text' && typeof part.text === 'string') return part.text
+      if (part.type === 'file' || part.type === 'image' || part.type === 'thinking' || part.type === 'toolCall') return ''
       return typeof part.text === 'string' ? part.text : ''
     })
     .filter(Boolean)
@@ -238,6 +346,35 @@ export function extractSessionThinking(content: unknown): string {
     })
     .filter(Boolean)
     .join('\n')
+}
+
+export function extractSessionAttachments(content: unknown): ChatAttachment[] {
+  const attachments: ChatAttachment[] = []
+
+  for (const part of normalizeSessionUserContent(content)) {
+    if (part.type === 'image') {
+      attachments.push({
+        kind: 'image' as const,
+        name: part.name ?? 'image',
+        mimeType: part.mimeType,
+        data: part.data,
+        size: part.size,
+      })
+      continue
+    }
+    if (part.type === 'file') {
+      attachments.push({
+        kind: 'file' as const,
+        name: part.name,
+        mimeType: part.mimeType,
+        text: part.text,
+        size: part.size,
+        truncated: part.truncated,
+      })
+    }
+  }
+
+  return attachments
 }
 
 export interface PausePacket {

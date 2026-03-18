@@ -4,6 +4,7 @@
  */
 
 import type {
+  ChatAttachment,
   PausePacket,
   SerializedTodoItem,
   SessionChannel,
@@ -134,6 +135,7 @@ export interface ClientEventPayloadMap {
     mode: SessionMode
     route: SessionRouteContext
     input: string
+    attachments?: ChatAttachment[]
     systemPrompt?: string
     sessionKey?: string
   }
@@ -142,6 +144,7 @@ export interface ClientEventPayloadMap {
     runId: string
     pauseId: string
     input: string
+    attachments?: ChatAttachment[]
     systemPrompt?: string
   }
   run_cancel: {

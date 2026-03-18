@@ -2,8 +2,10 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core'
-import type { Message, Model } from '@mariozechner/pi-ai'
+import type { ImageContent, Message, Model, TextContent, UserMessage } from '@mariozechner/pi-ai'
 import type {
+  ChatAttachment,
+  ChatFileAttachment,
   ClientEventPayloadMap,
   ClientModelOptions,
   PausePacket,
@@ -28,6 +30,7 @@ import {
   createStepId,
   extractSessionText,
   normalizeSessionAssistantContent,
+  normalizeSessionUserContent,
   resolveThinkingLevel,
 } from '@webclaw/shared'
 import { getConfig, type Env } from '../config/index.js'
@@ -115,6 +118,98 @@ function toSessionMessageRecord(message: AgentMessage): SessionMessageRecord {
     timestamp: typeof raw.timestamp === 'number' ? raw.timestamp : Date.now(),
     provider: raw.provider,
     model: raw.model,
+  }
+}
+
+function formatFileAttachmentForModel(attachment: Pick<ChatFileAttachment, 'name' | 'mimeType' | 'text' | 'truncated'>): string {
+  return [
+    `附件文件：${attachment.name}`,
+    `MIME 类型：${attachment.mimeType}`,
+    attachment.truncated ? '注意：文件内容已截断。' : '',
+    '',
+    attachment.text,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function createUserContent(input: string, attachments: ChatAttachment[] = []): SessionMessageRecord['content'] {
+  const blocks: ReturnType<typeof normalizeSessionUserContent> = []
+  const normalizedInput = input.trim()
+  const imageCount = attachments.filter((attachment) => attachment.kind === 'image').length
+  const fileCount = attachments.filter((attachment) => attachment.kind === 'file').length
+
+  if (normalizedInput.length > 0) {
+    blocks.push({ type: 'text', text: normalizedInput })
+  } else if (attachments.length > 0) {
+    const parts: string[] = []
+    if (imageCount > 0) parts.push(`${imageCount} 个图片附件`)
+    if (fileCount > 0) parts.push(`${fileCount} 个文件附件`)
+    blocks.push({
+      type: 'text',
+      text: `请结合我上传的${parts.join('和')}回答。`,
+    })
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.kind === 'image') {
+      blocks.push({
+        type: 'image',
+        data: attachment.data,
+        mimeType: attachment.mimeType,
+        name: attachment.name,
+        size: attachment.size,
+      })
+      continue
+    }
+
+    blocks.push({
+      type: 'file',
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      text: attachment.text,
+      size: attachment.size,
+      truncated: attachment.truncated,
+    })
+  }
+
+  if (blocks.length === 0) {
+    return ''
+  }
+
+  return blocks.length === 1 && blocks[0].type === 'text'
+    ? blocks[0].text
+    : blocks
+}
+
+function createAgentUserMessage(record: SessionMessageRecord): UserMessage {
+  const blocks = normalizeSessionUserContent(record.content)
+  if (blocks.length === 0) {
+    return {
+      role: 'user',
+      content: '',
+      timestamp: typeof record.timestamp === 'number' ? record.timestamp : Date.now(),
+    }
+  }
+
+  const content: Array<TextContent | ImageContent> = []
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      content.push({ type: 'text', text: block.text })
+      continue
+    }
+    if (block.type === 'image') {
+      content.push({ type: 'image', data: block.data, mimeType: block.mimeType })
+      continue
+    }
+    content.push({ type: 'text', text: formatFileAttachmentForModel(block) })
+  }
+
+  return {
+    role: 'user',
+    content,
+    timestamp: typeof record.timestamp === 'number' ? record.timestamp : Date.now(),
   }
 }
 
@@ -554,10 +649,10 @@ export class SessionRuntimeService {
     })
   }
 
-  private createUserMessage(input: string): SessionMessageRecord {
+  private createUserMessage(input: string, attachments: ChatAttachment[] = []): SessionMessageRecord {
     return {
       role: 'user',
-      content: input,
+      content: createUserContent(input, attachments),
       timestamp: Date.now(),
     }
   }
@@ -635,7 +730,7 @@ export class SessionRuntimeService {
     runId: RunId,
     mode: SessionMode,
     input: string,
-    modelOptions: ClientModelOptions & { systemPrompt?: string },
+    modelOptions: ClientModelOptions & { systemPrompt?: string; attachments?: ChatAttachment[] },
     resumePause?: PausePacket,
     returnReply = false,
   ): Promise<string> {
@@ -658,7 +753,8 @@ export class SessionRuntimeService {
       manager.appendPauseResolved(resumePause.pauseId, runId, input)
     }
 
-    const userMessage = this.createUserMessage(input)
+    const attachments = modelOptions.attachments ?? []
+    const userMessage = this.createUserMessage(input, attachments)
     const contextBeforeInput = manager.buildSessionContext().messages
     manager.appendMessage(userMessage)
     manager.appendRunStarted(runId, mode)
@@ -722,7 +818,7 @@ export class SessionRuntimeService {
     contextMessages: AgentMessage[],
     model: Model<'openai-completions'>,
     apiKey: string,
-    modelOptions: ClientModelOptions & { systemPrompt?: string },
+    modelOptions: ClientModelOptions & { systemPrompt?: string; attachments?: ChatAttachment[] },
     signal: AbortSignal,
     thinkingLevel: ReturnType<typeof resolveThinkingLevel>,
     mode: SessionMode = 'simple',
@@ -738,14 +834,10 @@ export class SessionRuntimeService {
     await this.refreshProjection(sessionKey)
     this.emitStepState(sessionKey, runId, step, 'started')
 
-    const result = await runSimpleAgent({
-      messages: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: extractSessionText((_userMessage as SessionMessageRecord).content) }],
-          timestamp: Date.now(),
-        },
-      ],
+      const result = await runSimpleAgent({
+        messages: [
+          createAgentUserMessage(_userMessage as SessionMessageRecord),
+        ],
       contextMessages,
       model,
       apiKey,
@@ -782,7 +874,7 @@ export class SessionRuntimeService {
     contextMessages: AgentMessage[],
     model: Model<'openai-completions'>,
     apiKey: string,
-    modelOptions: ClientModelOptions & { systemPrompt?: string },
+    modelOptions: ClientModelOptions & { systemPrompt?: string; attachments?: ChatAttachment[] },
     signal: AbortSignal,
     thinkingLevel: ReturnType<typeof resolveThinkingLevel>,
     resumePause?: PausePacket,
@@ -806,11 +898,7 @@ export class SessionRuntimeService {
 
       const managerResult = await runManagerAgent({
         messages: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: extractSessionText((_userMessage as SessionMessageRecord).content) }],
-            timestamp: Date.now(),
-          },
+          createAgentUserMessage(_userMessage as SessionMessageRecord),
         ],
         contextMessages,
         model,

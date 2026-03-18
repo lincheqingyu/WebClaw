@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { ClientEventPayloadMap, ServerEventPayloadMap, StepKind, ThinkingConfig } from '@webclaw/shared'
+import type { ChatAttachment, ClientEventPayloadMap, ServerEventPayloadMap, StepKind, ThinkingConfig } from '@webclaw/shared'
 import { WS_BASE } from '../config/api.ts'
 import { getPeerId } from '../lib/session.ts'
 import { buildDefaultRoute } from '../lib/session-route.ts'
@@ -19,6 +19,7 @@ export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
+  attachments?: ChatAttachment[]
   thinkingContent?: string
   hasThinking?: boolean
   isThinkingExpanded?: boolean
@@ -487,9 +488,10 @@ export function useChat({ modelConfig, peerId, currentSessionKey, onWsEvent }: U
     },
   }), [modelConfig])
 
-  const send = useCallback((text: string) => {
-    const input = text.trim()
-    if (!input) return false
+  const send = useCallback((payloadInput: { text: string; attachments?: ChatAttachment[] }) => {
+    const input = payloadInput.text.trim()
+    const attachments = payloadInput.attachments ?? []
+    if (!input && attachments.length === 0) return false
     if (isStreaming) return false
     if (isWaiting && mode !== 'plan') return false
 
@@ -500,6 +502,7 @@ export function useChat({ modelConfig, peerId, currentSessionKey, onWsEvent }: U
       id: userId,
       role: 'user',
       content: input,
+      attachments,
       timestamp: Date.now(),
     })
 
@@ -531,6 +534,7 @@ export function useChat({ modelConfig, peerId, currentSessionKey, onWsEvent }: U
         runId,
         pauseId,
         input,
+        attachments,
         ...buildModelOptions(),
       }
       ws.send(JSON.stringify({ event: 'run_resume', payload }))
@@ -541,6 +545,7 @@ export function useChat({ modelConfig, peerId, currentSessionKey, onWsEvent }: U
       route: buildDefaultRoute({ peerId: peerId ?? getPeerId() }),
       mode,
       input,
+      attachments,
       sessionKey: boundSessionKey ?? undefined,
       ...buildModelOptions(),
     }

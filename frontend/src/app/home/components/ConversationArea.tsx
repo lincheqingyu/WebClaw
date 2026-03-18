@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Moon, Settings, Square, Sun } from 'lucide-react'
-import { ChatInput } from '../../../components/ui/ChatInput'
+import { ChatInput, type ChatInputSubmitPayload } from '../../../components/ui/ChatInput'
 import { MessageList } from '../../../components/chat/MessageList'
 import {
   useChat,
@@ -126,9 +126,9 @@ export function ConversationArea({
     </button>
   ) : null
 
-  const handleSend = (text: string) => {
+  const handleSend = ({ message, attachments }: ChatInputSubmitPayload) => {
     if (!effectiveCanSend) return
-    const sent = send(text)
+    const sent = send({ text: message, attachments })
     if (sent) {
       setScrollRequestVersion((prev) => prev + 1)
     }
@@ -136,7 +136,7 @@ export function ConversationArea({
 
   const handleResendUser = (text: string) => {
     if (!text.trim() || !effectiveCanSend) return
-    const sent = send(text)
+    const sent = send({ text })
     if (sent) {
       setScrollRequestVersion((prev) => prev + 1)
     }

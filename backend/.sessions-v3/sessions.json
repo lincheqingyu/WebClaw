@@ -666,10 +666,10 @@
     "agent:default:webchat:default:dm:peer_1773820143867_dqfgxfwo": {
       "key": "agent:default:webchat:default:dm:peer_1773820143867_dqfgxfwo",
       "sessionId": "sess_1773820505305_jxjqqgu2",
-      "branchId": "ab46ef83",
+      "branchId": "b284a25c",
       "kind": "main",
       "channel": "webchat",
-      "updatedAt": 1773820590515,
+      "updatedAt": 1773827383510,
       "createdAt": 1773820505305,
       "title": "你是谁",
       "titleSource": "manual",
@@ -697,15 +697,153 @@
         "totalTokens": 0,
         "contextTokens": 0
       },
-      "model": "js-4b",
-      "latestPreview": "<think> </think> 不是。我是杭州京胜航星科技有限公司开发的ZxhClaw，专注于档案领域，提供干部/人员基础信息查询与AI档案详情获取服务。",
+      "model": "Qwen3.5-27B-UD-Q4_K_XL.gguf",
+      "latestPreview": "我是 ZxhClaw，由杭州京胜航星科技有限公司开发，专注于档案领域，提供干部/人员基础信息查询与 AI 档案详情获取服务。",
       "workflow": {
-        "runId": "run_1773820589486_4zmtyw0r",
+        "runId": "run_1773827368473_fu6xja9o",
         "mode": "simple",
         "status": "completed",
-        "startedAt": 1773820589487,
-        "updatedAt": 1773820590515,
-        "completedAt": 1773820590515
+        "startedAt": 1773827368474,
+        "updatedAt": 1773827383510,
+        "completedAt": 1773827383510
+      }
+    },
+    "agent:default:webchat:default:dm:peer_1773827389283_1efp2mrp": {
+      "key": "agent:default:webchat:default:dm:peer_1773827389283_1efp2mrp",
+      "sessionId": "sess_1773827391800_1k9ivig8",
+      "branchId": "39d8ca23",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773828880944,
+      "createdAt": 1773827391800,
+      "title": "你是谁",
+      "titleSource": "manual",
+      "titleStatus": "ready",
+      "displayName": "peer_1773827389283_1efp2mrp",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773827389283_1efp2mrp"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773827389283_1efp2mrp",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "Qwen3.5-27B-UD-Q4_K_XL.gguf",
+      "latestPreview": "你好",
+      "workflow": {
+        "runId": "run_1773828879146_zlwtqri4",
+        "mode": "simple",
+        "status": "failed",
+        "currentStepId": "step_1773828879149_so79hf47",
+        "currentStepKind": "simple_reply",
+        "error": "500 image input is not supported - hint: if this is unexpected, you may need to provide the mmproj。请补充更具体的目标、表名、字段名或执行范围后再试。",
+        "startedAt": 1773828879146,
+        "updatedAt": 1773828880944,
+        "completedAt": 1773828880944
+      }
+    },
+    "agent:default:webchat:default:dm:peer_1773828889621_sio5zlx1": {
+      "key": "agent:default:webchat:default:dm:peer_1773828889621_sio5zlx1",
+      "sessionId": "sess_1773828891815_xcin8jn1",
+      "branchId": "b3e21878",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773845520148,
+      "createdAt": 1773828891815,
+      "title": "你好",
+      "titleSource": "manual",
+      "titleStatus": "ready",
+      "displayName": "peer_1773828889621_sio5zlx1",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773828889621_sio5zlx1"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773828889621_sio5zlx1",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "Qwen3-4B-Instruct-2507-FP8",
+      "latestPreview": "我无法解析或读取 .docx 文件内容。我的能力集中在档案数据查询与人员信息处理，不支持文件内容解析。 如果您需要了解该文件中的具体信息（如团员姓名、评议内容等），请提供关键信息（如姓名、学号等），我可以帮您查询相关档案数据。",
+      "workflow": {
+        "runId": "run_1773845519181_c8k7r8wx",
+        "mode": "simple",
+        "status": "completed",
+        "startedAt": 1773845519183,
+        "updatedAt": 1773845520148,
+        "completedAt": 1773845520148
+      }
+    },
+    "agent:default:webchat:default:dm:peer_1773845545739_coye4fjq": {
+      "key": "agent:default:webchat:default:dm:peer_1773845545739_coye4fjq",
+      "sessionId": "sess_1773845558053_npc55osv",
+      "branchId": "925312c0",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773845585467,
+      "createdAt": 1773845558053,
+      "title": "告诉我这里写了什么",
+      "titleSource": "manual",
+      "titleStatus": "ready",
+      "displayName": "peer_1773845545739_coye4fjq",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773845545739_coye4fjq"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773845545739_coye4fjq",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "Qwen3-4B-Instruct-2507-FP8",
+      "latestPreview": "这是《OpenClaw 代码分析工作手册》，是 OpenClaw 项目中用于指导代码分析师行为的规范文档。 ### 核心内容概要： 1. **身份定位** 你是 OpenClaw 项目的**代码分析师**，职责是： - 梳理模块逻辑、数据流...",
+      "workflow": {
+        "runId": "run_1773845576636_fi70qguw",
+        "mode": "simple",
+        "status": "completed",
+        "startedAt": 1773845576637,
+        "updatedAt": 1773845585467,
+        "completedAt": 1773845585467
       }
     }
   }

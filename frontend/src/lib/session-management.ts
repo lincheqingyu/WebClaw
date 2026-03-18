@@ -1,4 +1,5 @@
 import {
+  extractSessionAttachments,
   extractSessionText,
   extractSessionThinking,
   type SessionEventEntry,
@@ -53,6 +54,7 @@ export function toChatMessages(records: SessionMessageRecord[]): ChatMessage[] {
         id: `history_${record.role}_${record.timestamp ?? Date.now()}_${index}`,
         role: record.role as ChatMessage['role'],
         content: extractMessageText(record.content),
+        attachments: record.role === 'user' ? extractSessionAttachments(record.content) : undefined,
         thinkingContent: thinkingContent || undefined,
         hasThinking: thinkingContent.trim().length > 0,
         isThinkingExpanded: false,
@@ -128,6 +130,7 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
           id: createHistoryId('user', index),
           role: 'user',
           content: extractSessionText(entry.message.content),
+          attachments: extractSessionAttachments(entry.message.content),
           timestamp: entry.message.timestamp ?? new Date(entry.timestamp).getTime(),
         })
         return
