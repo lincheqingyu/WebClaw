@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ChatAttachment } from '@webclaw/shared'
 import type { ChatMessage } from '../../hooks/useChat'
 import { MessageItem } from './MessageItem'
 
@@ -10,7 +11,10 @@ interface MessageListProps {
   onToggleThinking?: (messageId: string) => void
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
+  onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  activeAttachmentKey?: string | null
   scrollRequestVersion?: number
+  wideLayout?: boolean
 }
 
 const BOTTOM_THRESHOLD_PX = 48
@@ -24,7 +28,10 @@ export function MessageList({
   onToggleThinking,
   onToggleTodo,
   onTogglePlanTask,
+  onOpenAttachment,
+  activeAttachmentKey = null,
   scrollRequestVersion = 0,
+  wideLayout = false,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -126,7 +133,9 @@ export function MessageList({
       onWheel={markUserInteraction}
       onTouchMove={markUserInteraction}
       onPointerDown={markUserInteraction}
-      className="chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-2"
+      className={wideLayout
+        ? 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-6'
+        : 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-2'}
       style={{
         WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 28px), transparent 100%)',
         maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 28px), transparent 100%)',
@@ -137,7 +146,12 @@ export function MessageList({
           发送消息开始对话
         </div>
       )}
-      <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+      <div
+        ref={contentRef}
+        className={wideLayout
+          ? 'mr-auto flex w-full max-w-[min(100%,56rem)] flex-col gap-3'
+          : 'mx-auto flex w-full max-w-3xl flex-col gap-3'}
+      >
         {messages.map((message) => (
           <MessageItem
             key={message.id}
@@ -146,6 +160,8 @@ export function MessageList({
             onToggleThinking={onToggleThinking}
             onToggleTodo={onToggleTodo}
             onTogglePlanTask={onTogglePlanTask}
+            onOpenAttachment={onOpenAttachment}
+            activeAttachmentKey={activeAttachmentKey}
           />
         ))}
       </div>

@@ -1,3 +1,4 @@
+import type { ChatAttachment } from '@webclaw/shared'
 import { MessageList } from '../../components/chat/MessageList'
 import type { ChatMessage } from '../../hooks/useChat'
 
@@ -9,7 +10,10 @@ interface PiMessageListAdapterProps {
   onToggleThinking?: (messageId: string) => void
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
+  onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  activeAttachmentKey?: string | null
   scrollRequestVersion?: number
+  wideLayout?: boolean
 }
 
 /**

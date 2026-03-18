@@ -585,16 +585,9 @@ export function SettingsDrawer({
     return (
         <div
             className={clsx(
-                // 定位：固定在视口右侧
-                // 尺寸：占满高度，宽 320px
-                "h-screen w-80 shrink-0",
-                // 外观：背景与主页面统一，降低分栏割裂感
-                "bg-surface-alt",
-                // 动画：平滑滑入/滑出
-                "transition-transform duration-300 ease-in-out",
-                // 条件样式：clsx 的核心价值 ——
-                // 比模板字符串里写三元表达式更清晰
-                isOpen ? "mr-0" : "-mr-80"
+                "h-screen shrink-0 overflow-hidden bg-surface-alt",
+                "transition-[width] duration-300 ease-in-out",
+                isOpen ? "w-80" : "w-0"
             )}
         >
             {/* ---------- 抽屉头部 ---------- */}

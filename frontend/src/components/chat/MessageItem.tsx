@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronUp, Copy, FileText, ListTodo, RotateCcw, Spa
 import { useState, type FocusEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../../hooks/useChat'
 import { buildAttachmentPreviewUrl } from '../../lib/chat-attachments'
+import type { ChatAttachment } from '@webclaw/shared'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -10,6 +11,31 @@ interface MessageItemProps {
   onToggleThinking?: (messageId: string) => void
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
+  onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  activeAttachmentKey?: string | null
+}
+
+function formatAttachmentMeta(attachment: ChatAttachment): string {
+  const sizeLabel = attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : null
+
+  if (attachment.kind === 'image') {
+    return sizeLabel ? `图片 · ${sizeLabel}` : '图片'
+  }
+
+  const mime = attachment.mimeType.toLowerCase()
+  let typeLabel = '文档'
+  if (mime.includes('pdf')) typeLabel = 'PDF'
+  else if (mime.includes('wordprocessingml')) typeLabel = 'DOCX'
+  else if (mime.includes('spreadsheetml') || mime.includes('ms-excel')) typeLabel = 'Excel'
+  else if (mime.includes('markdown')) typeLabel = 'Markdown'
+  else if (mime.includes('json')) typeLabel = 'JSON'
+  else if (mime.startsWith('text/')) typeLabel = '文本'
+
+  if (attachment.truncated) {
+    return sizeLabel ? `${typeLabel} · ${sizeLabel} · 已截断` : `${typeLabel} · 已截断`
+  }
+
+  return sizeLabel ? `${typeLabel} · ${sizeLabel}` : typeLabel
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
@@ -465,7 +491,7 @@ function MarkdownPreviewBlock({ code }: { code: string }) {
   )
 }
 
-function renderMarkdown(text: string): ReactNode {
+export function renderMarkdown(text: string): ReactNode {
   const normalized = normalizeMarkdown(text)
   const segments = splitMarkdownSegments(normalized)
   return (
@@ -520,6 +546,8 @@ export function MessageItem({
   onToggleThinking,
   onToggleTodo,
   onTogglePlanTask,
+  onOpenAttachment,
+  activeAttachmentKey = null,
 }: MessageItemProps) {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
@@ -671,13 +699,19 @@ export function MessageItem({
     if (attachments.length === 0) return null
 
     return (
-      <div className="mb-3 space-y-2">
-        <div className="flex flex-wrap gap-2">
+      <div className={clsx('mb-2.5 flex flex-col gap-2', isUser ? 'items-end' : 'items-start')}>
           {attachments.map((attachment, index) => (
             attachment.kind === 'image' ? (
-              <div
+              <button
                 key={`${attachment.name}_${index}`}
-                className="overflow-hidden rounded-[1.1rem] border border-border bg-surface-thought shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
+                type="button"
+                onClick={() => onOpenAttachment?.(message.id, index, attachment)}
+                title={attachment.name}
+                className={clsx(
+                  'group overflow-hidden rounded-[1.25rem] border bg-surface-thought text-left shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-all',
+                  'w-full max-w-[18rem] hover:-translate-y-0.5 hover:border-[color:var(--border-strong)] hover:shadow-[0_14px_34px_rgba(15,23,42,0.10)]',
+                  activeAttachmentKey === `${message.id}:${index}` ? 'border-[color:var(--border-strong)] shadow-[0_14px_34px_rgba(15,23,42,0.10)]' : 'border-border',
+                )}
               >
                 <img
                   src={buildAttachmentPreviewUrl(attachment) ?? ''}
@@ -686,27 +720,31 @@ export function MessageItem({
                 />
                 <div className="border-t border-border/70 px-3 py-2">
                   <div className="truncate text-xs font-medium text-text-primary">{attachment.name}</div>
+                  <div className="mt-0.5 text-[11px] text-text-secondary">{formatAttachmentMeta(attachment)}</div>
                 </div>
-              </div>
+              </button>
             ) : (
-              <div
+              <button
                 key={`${attachment.name}_${index}`}
-                className="flex min-w-[12rem] max-w-[18rem] items-start gap-3 rounded-[1.1rem] border border-border bg-surface-thought px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                type="button"
+                onClick={() => onOpenAttachment?.(message.id, index, attachment)}
+                title={attachment.name}
+                className={clsx(
+                  'group flex w-full max-w-[22rem] items-center gap-3 rounded-[1.25rem] border bg-surface-thought px-3.5 py-3 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all',
+                  'hover:-translate-y-0.5 hover:border-[color:var(--border-strong)] hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]',
+                  activeAttachmentKey === `${message.id}:${index}` ? 'border-[color:var(--border-strong)] shadow-[0_14px_34px_rgba(15,23,42,0.08)]' : 'border-border',
+                )}
               >
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface text-text-secondary">
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl bg-surface text-text-secondary transition-colors group-hover:text-text-primary">
                   <FileText className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
-                  <div className="mt-0.5 text-xs text-text-secondary">
-                    {(attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : '文本文件')}
-                    {attachment.truncated ? ' · 已截断' : ''}
-                  </div>
+                  <div className="mt-0.5 truncate text-xs text-text-secondary">{formatAttachmentMeta(attachment)}</div>
                 </div>
-              </div>
+              </button>
             )
           ))}
-        </div>
       </div>
     )
   }
@@ -728,62 +766,64 @@ export function MessageItem({
         onFocusCapture={() => setIsActionBarFocused(true)}
         onBlur={handleActionAreaBlur}
       >
-        <div
-          className={clsx(
-            'rounded-2xl px-4 py-2 text-sm leading-relaxed',
-            isUser && 'w-fit bg-hover text-text-primary border border-border/70',
-            isAssistant && (showThoughtsCard ? 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1' : 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1'),
-            isEvent && 'bg-surface text-text-secondary border border-border/80',
-            message.role === 'system' && 'bg-hover text-text-secondary border border-border',
-          )}
-        >
-          {isEvent && eventLabel && (
-            <div className="mb-1 text-xs uppercase tracking-wide text-text-muted">
-              {eventLabel}
-            </div>
-          )}
+        {attachments.length > 0 && renderAttachments()}
 
-          {showThoughtsCard && (
-            <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-border bg-surface-thought">
-              <button
-                type="button"
-                onClick={() => onToggleThinking?.(message.id)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-hover/60"
-                aria-expanded={message.isThinkingExpanded}
-                aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-thought text-accent-text">
-                    <Sparkles className="size-3.5" />
-                  </span>
-                  <span className="text-sm font-semibold text-text-primary">Thoughts</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-text-secondary">
-                  <span>{message.isThinkingExpanded ? '收起思考' : '展开思考'}</span>
-                  {message.isThinkingExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                </div>
-              </button>
+        {(showThoughtsCard || hasPrimaryContent || isEvent) && (
+          <div
+            className={clsx(
+              'rounded-2xl px-4 py-2 text-sm leading-relaxed',
+              isUser && hasPrimaryContent && 'w-fit bg-hover text-text-primary border border-border/70',
+              isAssistant && (showThoughtsCard ? 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1' : 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1'),
+              isEvent && 'bg-surface text-text-secondary border border-border/80',
+              message.role === 'system' && 'bg-hover text-text-secondary border border-border',
+            )}
+          >
+            {isEvent && eventLabel && (
+              <div className="mb-1 text-xs uppercase tracking-wide text-text-muted">
+                {eventLabel}
+              </div>
+            )}
 
-              {message.isThinkingExpanded && (
-                <div className="border-t border-border px-4 py-4 text-text-primary [&_p]:text-text-primary [&_li]:text-text-primary [&_blockquote]:text-text-primary [&_td]:text-text-primary [&_code]:text-text-primary">
-                  {renderMarkdown(message.thinkingContent ?? '')}
-                </div>
-              )}
-            </div>
-          )}
+            {showThoughtsCard && (
+              <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-border bg-surface-thought">
+                <button
+                  type="button"
+                  onClick={() => onToggleThinking?.(message.id)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-hover/60"
+                  aria-expanded={message.isThinkingExpanded}
+                  aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-thought text-accent-text">
+                      <Sparkles className="size-3.5" />
+                    </span>
+                    <span className="text-sm font-semibold text-text-primary">Thoughts</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-text-secondary">
+                    <span>{message.isThinkingExpanded ? '收起思考' : '展开思考'}</span>
+                    {message.isThinkingExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                  </div>
+                </button>
 
-          {isUser && renderAttachments()}
+                {message.isThinkingExpanded && (
+                  <div className="border-t border-border px-4 py-4 text-text-primary [&_p]:text-text-primary [&_li]:text-text-primary [&_blockquote]:text-text-primary [&_td]:text-text-primary [&_code]:text-text-primary">
+                    {renderMarkdown(message.thinkingContent ?? '')}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {isAssistant ? (
-            hasPrimaryContent ? (
-              renderMarkdown(message.content)
-            ) : null
-          ) : (
-            hasPrimaryContent ? (
-              <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
-            ) : null
-          )}
-        </div>
+            {isAssistant ? (
+              hasPrimaryContent ? (
+                renderMarkdown(message.content)
+              ) : null
+            ) : (
+              hasPrimaryContent ? (
+                <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+              ) : null
+            )}
+          </div>
+        )}
         {(isUser || isAssistant) && canCopyMessage && (
           <div
             className={clsx(

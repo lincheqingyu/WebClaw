@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Moon, Settings, Square, Sun } from 'lucide-react'
+import type { ChatAttachment } from '@webclaw/shared'
 import { ChatInput, type ChatInputSubmitPayload } from '../../../components/ui/ChatInput'
 import { MessageList } from '../../../components/chat/MessageList'
 import {
@@ -29,6 +30,10 @@ interface ConversationAreaProps {
   onSessionResolved: (payload: SessionResolvedPayload) => void
   onSessionTitleUpdated: (payload: SessionTitleUpdatedPayload) => void
   onChatLifecycleEvent: (event: 'run_completed' | 'run_paused' | 'run_failed') => void
+  onOpenAttachment: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  activeAttachmentKey?: string | null
+  showHeader?: boolean
+  workspaceMode?: 'default' | 'split'
 }
 
 export function ConversationArea({
@@ -47,6 +52,10 @@ export function ConversationArea({
   onSessionResolved,
   onSessionTitleUpdated,
   onChatLifecycleEvent,
+  onOpenAttachment,
+  activeAttachmentKey = null,
+  showHeader = true,
+  workspaceMode = 'default',
 }: ConversationAreaProps) {
   const [scrollRequestVersion, setScrollRequestVersion] = useState(0)
   const {
@@ -107,6 +116,7 @@ export function ConversationArea({
 
   const MessageListComp = USE_PI_WEB_UI_PARTIAL ? PiMessageListAdapter : MessageList
   const ChatInputComp = USE_PI_WEB_UI_PARTIAL ? PiChatInputAdapter : ChatInput
+  const isSplitWorkspace = workspaceMode === 'split'
   const stopButton = showStopButton ? (
     <button
       type="button"
@@ -145,11 +155,11 @@ export function ConversationArea({
   return (
     <div
       className={[
-        'relative flex-1 min-h-0',
-        'border-r border-border bg-surface-alt',
+        'relative flex min-h-0 flex-1 flex-col overflow-hidden',
+        isSplitWorkspace ? 'bg-surface-alt' : 'border-r border-border bg-surface-alt',
       ].join(' ')}
     >
-      <div className="flex h-full flex-col">
+      {showHeader && (
         <header className="h-12 shrink-0 bg-surface-alt/95 backdrop-blur">
           <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
             <div className="min-w-0 flex items-center gap-3">
@@ -193,40 +203,45 @@ export function ConversationArea({
             </div>
           </div>
         </header>
+      )}
 
-        <div className="flex-1 min-h-0">
-          {!hasSent ? (
-            <div className="flex h-full flex-col items-center justify-center">
-              <div className="mb-8 text-center">
-                <div className="text-2xl font-semibold text-text-primary">有什么我可以帮你的？</div>
-                <div className="mt-2 text-sm text-text-muted">支持 simple 与 plan 两种模式</div>
-              </div>
-              <ChatInputComp
-                mode={mode}
-                onModeChange={setMode}
-                onSend={handleSend}
-                showSuggestions
-                disabled={!effectiveCanSend}
-                disabledReason={effectiveDisabledReason}
-                rightSlot={stopButton}
+      <div className="flex-1 min-h-0">
+        {!hasSent ? (
+          <div className="flex h-full flex-col items-center justify-center">
+            <div className="mb-8 text-center">
+              <div className="text-2xl font-semibold text-text-primary">有什么我可以帮你的？</div>
+              <div className="mt-2 text-sm text-text-muted">支持 simple 与 plan 两种模式</div>
+            </div>
+            <ChatInputComp
+              mode={mode}
+              onModeChange={setMode}
+              onSend={handleSend}
+              showSuggestions
+              disabled={!effectiveCanSend}
+              disabledReason={effectiveDisabledReason}
+              rightSlot={stopButton}
+            />
+          </div>
+        ) : (
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <MessageListComp
+                messages={messages}
+                isStreaming={isStreaming}
+                isWaiting={isWaiting}
+                onResendUser={handleResendUser}
+                onToggleThinking={toggleThinking}
+                onToggleTodo={toggleTodo}
+                onTogglePlanTask={togglePlanTask}
+                onOpenAttachment={onOpenAttachment}
+                activeAttachmentKey={activeAttachmentKey}
+                scrollRequestVersion={scrollRequestVersion}
+                wideLayout={isSplitWorkspace}
               />
             </div>
-          ) : (
-            <div className="flex size-full flex-col">
-              <div className="flex-1 min-h-0">
-                <MessageListComp
-                  messages={messages}
-                  isStreaming={isStreaming}
-                  isWaiting={isWaiting}
-                  onResendUser={handleResendUser}
-                  onToggleThinking={toggleThinking}
-                  onToggleTodo={toggleTodo}
-                  onTogglePlanTask={togglePlanTask}
-                  scrollRequestVersion={scrollRequestVersion}
-                />
-              </div>
-              <div className="sticky bottom-0 z-10 w-full bg-gradient-to-t from-surface-alt via-surface-alt/95 to-transparent pt-4 pb-5">
-                <div className="mx-auto w-full max-w-3xl px-4 md:px-2">
+            <div className="shrink-0 bg-gradient-to-t from-surface-alt via-surface-alt/95 to-transparent pt-4 pb-5">
+              <div className={isSplitWorkspace ? 'w-full px-4 md:px-6' : 'mx-auto w-full max-w-3xl px-4 md:px-2'}>
+                <div className={isSplitWorkspace ? 'mr-auto max-w-[min(100%,56rem)]' : ''}>
                   <ChatInputComp
                     mode={mode}
                     onModeChange={setMode}
@@ -239,8 +254,8 @@ export function ConversationArea({
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
