@@ -623,20 +623,22 @@ export class SessionManager {
     return entry.id
   }
 
-  appendStepStarted(runId: RunId, stepId: StepId, kind: StepKind, title?: string, todoIndex?: number): string {
+  appendStepStarted(runId: RunId, stepId: StepId, kind: StepKind, title?: string, todoIndex?: number): StepStartedEntry {
+    const startedAt = Date.now()
     const entry: StepStartedEntry = {
       type: 'step_started',
       id: generateId(this.byId),
       parentId: this.leafId,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(startedAt).toISOString(),
       runId,
       stepId,
       kind,
+      startedAt,
       title,
       todoIndex,
     }
     this._appendEntry(entry)
-    return entry.id
+    return entry
   }
 
   appendStepFinished(
@@ -646,21 +648,27 @@ export class SessionManager {
     status: 'completed' | 'failed',
     summary?: string,
     todoIndex?: number,
-  ): string {
+    timing?: { startedAt?: number },
+  ): StepFinishedEntry {
+    const finishedAt = Date.now()
+    const startedAt = timing?.startedAt
     const entry: StepFinishedEntry = {
       type: 'step_finished',
       id: generateId(this.byId),
       parentId: this.leafId,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(finishedAt).toISOString(),
       runId,
       stepId,
       kind,
       status,
+      startedAt,
+      finishedAt,
+      durationMs: typeof startedAt === 'number' ? Math.max(0, finishedAt - startedAt) : undefined,
       summary,
       todoIndex,
     }
     this._appendEntry(entry)
-    return entry.id
+    return entry
   }
 
   appendTodoUpdated(runId: RunId, items: SerializedTodoItem[]): string {

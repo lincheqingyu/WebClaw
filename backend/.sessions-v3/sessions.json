@@ -845,6 +845,141 @@
         "updatedAt": 1773848982651,
         "completedAt": 1773848982651
       }
+    },
+    "agent:default:webchat:default:dm:peer_1773882824928_hnv2v2yc": {
+      "key": "agent:default:webchat:default:dm:peer_1773882824928_hnv2v2yc",
+      "sessionId": "sess_1773882906723_31h3jm5a",
+      "branchId": "7a194aad",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773905408305,
+      "createdAt": 1773882906723,
+      "title": "查看张三的档案id",
+      "titleSource": "manual",
+      "titleStatus": "ready",
+      "displayName": "peer_1773882824928_hnv2v2yc",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773882824928_hnv2v2yc"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773882824928_hnv2v2yc",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf",
+      "latestPreview": "好的！我会提供更深入、更全面的分析。 **我的思考方式：** 1. **问题拆解** - 将复杂问题分解为多个子问题 2. **多角度分析** - 从不同维度（时间、空间、因果等）思考 3. **证据链构建** - 确保结论有充分的数据支撑...",
+      "workflow": {
+        "runId": "run_1773905399166_mk7rc86u",
+        "mode": "simple",
+        "status": "completed",
+        "startedAt": 1773905399167,
+        "updatedAt": 1773905408305,
+        "completedAt": 1773905408305
+      }
+    },
+    "agent:default:webchat:default:dm:peer_1773886651880_t5xqdk5y": {
+      "key": "agent:default:webchat:default:dm:peer_1773886651880_t5xqdk5y",
+      "sessionId": "sess_1773886670053_ncvxmtzz",
+      "branchId": "0f5db387",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773886882603,
+      "createdAt": 1773886670053,
+      "displayName": "peer_1773886651880_t5xqdk5y",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773886651880_t5xqdk5y"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773886651880_t5xqdk5y",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "Qwen3.5-27B-UD-Q4_K_XL.gguf",
+      "latestPreview": "```html <!DOCTYPE html> <html lang=\"zh-CN\"> <head> <meta charset=\"UTF-8\"> <meta name=\"viewport\" content=\"width=device-wi...",
+      "workflow": {
+        "runId": "run_1773886853030_t5e1eyli",
+        "mode": "simple",
+        "status": "completed",
+        "startedAt": 1773886853031,
+        "updatedAt": 1773886882603,
+        "completedAt": 1773886882601
+      },
+      "title": "写一个hello world html示例",
+      "titleSource": "manual",
+      "titleStatus": "ready"
+    },
+    "agent:default:webchat:default:dm:peer_1773886936448_8ebkfdh8": {
+      "key": "agent:default:webchat:default:dm:peer_1773886936448_8ebkfdh8",
+      "sessionId": "sess_1773887201757_20kf8vov",
+      "branchId": "2c4e3eab",
+      "kind": "main",
+      "channel": "webchat",
+      "updatedAt": 1773887410952,
+      "createdAt": 1773887201757,
+      "title": "你好",
+      "titleSource": "manual",
+      "titleStatus": "ready",
+      "displayName": "peer_1773886936448_8ebkfdh8",
+      "origin": {
+        "provider": "webchat",
+        "accountId": "default",
+        "peerId": "peer_1773886936448_8ebkfdh8"
+      },
+      "route": {
+        "channel": "webchat",
+        "chatType": "dm",
+        "peerId": "peer_1773886936448_8ebkfdh8",
+        "accountId": "default",
+        "userTimezone": "Asia/Shanghai"
+      },
+      "deliveryContext": {
+        "channel": "webchat",
+        "accountId": "default"
+      },
+      "stats": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "contextTokens": 0
+      },
+      "model": "deepseek-32b-awq",
+      "latestPreview": "<think> 好的，我现在需要分析用户的问题。用户输入了“你好”，这是一个常见的问候语。根据之前的对话历史，用户已经向我发送了“你好”，而我回复了欢迎信息，并询问有什么需要查询的。 首先，我应该考虑用户的意图。用户可能只是在打招呼，或者可...",
+      "workflow": {
+        "runId": "run_1773887399996_ynfw1v77",
+        "mode": "simple",
+        "status": "completed",
+        "startedAt": 1773887399998,
+        "updatedAt": 1773887410952,
+        "completedAt": 1773887410952
+      }
     }
   }
 }

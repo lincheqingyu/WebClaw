@@ -1,6 +1,7 @@
 import type { ChatAttachment } from '@webclaw/shared'
 import { MessageList } from '../../components/chat/MessageList'
 import type { ChatMessage } from '../../hooks/useChat'
+import type { ChatArtifact } from '../../lib/artifacts'
 
 interface PiMessageListAdapterProps {
   messages: ChatMessage[]
@@ -11,6 +12,8 @@ interface PiMessageListAdapterProps {
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
   onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  onOpenArtifact?: (messageId: string, artifactIndex: number, artifact: ChatArtifact) => void
+  onDownloadArtifact?: (artifact: ChatArtifact) => void
   activeAttachmentKey?: string | null
   scrollRequestVersion?: number
   wideLayout?: boolean

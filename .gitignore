@@ -13,6 +13,8 @@ dist/
 # 会话数据
 .sessions/
 .sessions-v2/
+.ZxhClaw/artifacts/docs/*
+!.ZxhClaw/artifacts/docs/.gitkeep
 
 # 编译中间文件（shared 包）
 shared/src/*.js

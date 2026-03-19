@@ -7,6 +7,8 @@
  * ============================================ */
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ============================================
  * 主题变量定义
  *
@@ -28,6 +30,7 @@
     --color-sidebar-hover: #f3f0e8;         /* 侧栏 hover */
     --color-sidebar-active: #ece9e1;        /* 侧栏选中 */
     --color-browser-theme: #f6f6f7;         /* 浏览器壳 tint 提示 */
+    --color-user-bubble: #F0EEE6;           /* 用户消息气泡 */
 
     /* ---------- 文字色 ---------- */
     --color-text-primary: #0f172a;     /* 主文字：标题、正文 */
@@ -66,6 +69,7 @@
     --color-sidebar-hover: #232427;
     --color-sidebar-active: #2b2d31;
     --color-browser-theme: #1f1f1f;
+    --color-user-bubble: #2a2a2a;
     --color-text-primary: #ececec;
     --color-text-secondary: #a9a9a9;
     --color-text-muted: #7a7a7a;

@@ -12,6 +12,8 @@ export interface PromptContextPaths {
   readonly workspaceDir: string
   readonly rootDir: string
   readonly memoryDir: string
+  readonly artifactsDir: string
+  readonly artifactsDocsDir: string
   readonly soulFile: string
   readonly identityFile: string
   readonly userFile: string
@@ -148,6 +150,8 @@ function buildManagedToolsContent(paths: PromptContextPaths): string {
     '## 工作区',
     `- 项目根目录：${paths.workspaceDir}`,
     `- Prompt 上下文目录：${paths.rootDir}`,
+    `- AI 产物目录：${paths.artifactsDir}`,
+    `- 文档产物目录：${paths.artifactsDocsDir}`,
     `- 技能目录：${path.join(paths.workspaceDir, 'skills')}`,
     `- 文档目录：${path.join(paths.workspaceDir, 'docs')}`,
     '',
@@ -155,6 +159,8 @@ function buildManagedToolsContent(paths: PromptContextPaths): string {
     '- 工具可用性以 system prompt 的 Tooling 章节为准，本文件只提供环境说明。',
     '- 会话协作优先使用 session tools；不要用 bash 伪造内部调用。',
     '- 需要技能知识时，先根据技能描述选择，再用 skill 工具读取具体 SKILL.md。',
+    '- 生成交付给用户的文档、页面、报告、导出文件时，默认写入 `.ZxhClaw/artifacts/docs/`；只有用户明确指定位置时才写到其它目录。',
+    '- 只有 `.ZxhClaw/artifacts/docs/` 下的产物会被前端当成文件卡片展示；项目源码、配置和内部文档不要作为附件暴露给用户。',
     '',
   ].join('\n')
 }
@@ -163,12 +169,16 @@ export function resolvePromptContextPaths(workspaceDir?: string): PromptContextP
   const baseDir = toAbsolute(workspaceDir)
   const rootDir = path.join(baseDir, '.ZxhClaw')
   const memoryDir = path.join(rootDir, 'memory')
+  const artifactsDir = path.join(rootDir, 'artifacts')
+  const artifactsDocsDir = path.join(artifactsDir, 'docs')
   const legacyMemoryDir = path.join(baseDir, '.memory')
 
   return {
     workspaceDir: baseDir,
     rootDir,
     memoryDir,
+    artifactsDir,
+    artifactsDocsDir,
     soulFile: path.join(rootDir, 'SOUL.md'),
     identityFile: path.join(rootDir, 'IDENTITY.md'),
     userFile: path.join(rootDir, 'USER.md'),
@@ -187,6 +197,7 @@ export async function ensurePromptContextFiles(workspaceDir?: string): Promise<P
 
   await fs.mkdir(paths.rootDir, { recursive: true })
   await fs.mkdir(paths.memoryDir, { recursive: true })
+  await fs.mkdir(paths.artifactsDocsDir, { recursive: true })
 
   await writeIfChanged(paths.agentsFile, buildManagedAgentsContent())
   await writeIfChanged(paths.toolsFile, buildManagedToolsContent(paths))

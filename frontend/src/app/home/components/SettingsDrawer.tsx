@@ -19,10 +19,10 @@ import {
 
 interface ModelPresetItem {
     id: string
-    title: string
     model: string
     baseUrl: string
     apiKey: string
+    title?: string
 }
 
 /**
@@ -76,6 +76,15 @@ function loadActiveModelPresetIdFromStorage(): string | null {
     }
 }
 
+function getModelPresetLabel(item: ModelPresetItem | null | undefined): string {
+    if (!item) return ''
+    const modelLabel = item?.model?.trim()
+    if (modelLabel) return modelLabel
+    const legacyTitle = item?.title?.trim()
+    if (legacyTitle) return legacyTitle
+    return 'Untitled model'
+}
+
 /**
  * 设置抽屉
  *
@@ -120,7 +129,6 @@ export function SettingsDrawer({
     const [selectedModelPresetId, setSelectedModelPresetId] = useState<string>(() => {
         return loadActiveModelPresetIdFromStorage() ?? NEW_MODEL_PRESET_VALUE
     })
-    const [draftModelTitle, setDraftModelTitle] = useState('')
     const [draftModel, setDraftModel] = useState('')
     const [draftBaseUrl, setDraftBaseUrl] = useState('')
     const [draftApiKey, setDraftApiKey] = useState('')
@@ -139,6 +147,18 @@ export function SettingsDrawer({
     const [selectedMemoryContent, setSelectedMemoryContent] = useState('')
     const [memorySaveStatus, setMemorySaveStatus] = useState<'Saved' | 'Editing'>('Saved')
     const thinkingConfig = modelConfig.thinking ?? createDefaultThinkingConfig()
+
+    const resetDrawerPanels = useCallback(() => {
+        setIsContextPanelOpen(false)
+        setIsModelPanelOpen(false)
+        setIsModelOptionsOpen(false)
+        setActiveInlineDropdown(null)
+        setSelectedContextFile('SOUL.md')
+        setSelectedManagedFile(null)
+        setSelectedMemoryFile(null)
+        setSelectedMemoryContent('')
+        setContextError(null)
+    }, [])
 
     const updateModelConfig = (partial: Partial<ModelConfig>) => {
         onModelConfigChange({...modelConfig, ...partial})
@@ -173,9 +193,7 @@ export function SettingsDrawer({
             if (!modelId) {
                 throw new Error('未找到可用模型')
             }
-            setDraftModel(modelId)
-            setModelSaveStatus('Editing')
-            setModelsError(null)
+            return modelId
         } catch (error: unknown) {
             if (error instanceof DOMException && error.name === 'AbortError') return
             const msg = error instanceof Error ? error.message : '获取模型失败'
@@ -185,27 +203,28 @@ export function SettingsDrawer({
         }
     }, [])
 
-    /** 监听 baseUrl / apiKey 变化，防抖 500ms 后自动获取模型名称 */
-    useEffect(() => {
+    const handleConnectModel = useCallback(async () => {
         if (!draftBaseUrl.trim()) {
-            setDraftModel('')
-            setModelsError(null)
-            setModelsLoading(false)
+            setModelsError('请先填写 Base URL')
             return
         }
 
-        const timer = window.setTimeout(() => {
-            fetchAbortRef.current?.abort()
-            const controller = new AbortController()
-            fetchAbortRef.current = controller
-            void fetchModelName(draftBaseUrl.trim(), draftApiKey.trim(), controller.signal)
-        }, 500)
+        fetchAbortRef.current?.abort()
+        const controller = new AbortController()
+        fetchAbortRef.current = controller
+        const modelId = await fetchModelName(draftBaseUrl.trim(), draftApiKey.trim(), controller.signal)
+        if (!modelId) return
 
+        setDraftModel(modelId)
+        setModelSaveStatus('Editing')
+        setModelsError(null)
+    }, [draftApiKey, draftBaseUrl, fetchModelName])
+
+    useEffect(() => {
         return () => {
-            window.clearTimeout(timer)
             fetchAbortRef.current?.abort()
         }
-    }, [draftBaseUrl, draftApiKey, fetchModelName])
+    }, [])
 
     const maxTokenPreset = (() => {
         if (modelConfig.maxTokens <= 8192) return 'low'
@@ -255,10 +274,10 @@ export function SettingsDrawer({
         const id = `model_${Date.now()}`
         const initial: ModelPresetItem = {
             id,
-            title: 'Default model',
             model: modelConfig.model || '',
             baseUrl: modelConfig.baseUrl || '',
             apiKey: modelConfig.apiKey || '',
+            title: modelConfig.model || 'Default model',
         }
         setModelPresets([initial])
         setSelectedModelPresetId(id)
@@ -281,18 +300,17 @@ export function SettingsDrawer({
         const initialId = selectedModelPresetId ?? NEW_MODEL_PRESET_VALUE
         setSelectedModelPresetId(initialId)
         if (initialId === NEW_MODEL_PRESET_VALUE) {
-            setDraftModelTitle('')
             setDraftModel('')
             setDraftBaseUrl('')
             setDraftApiKey('')
         } else {
             const selected = modelPresets.find((p) => p.id === initialId)
-            setDraftModelTitle(selected?.title ?? '')
             setDraftModel(selected?.model ?? '')
             setDraftBaseUrl(selected?.baseUrl ?? '')
             setDraftApiKey(selected?.apiKey ?? '')
         }
         setModelSaveStatus('Saved')
+        setModelsError(null)
     }, [isModelPanelOpen, modelPresets, selectedModelPresetId])
 
     useEffect(() => {
@@ -341,21 +359,26 @@ export function SettingsDrawer({
     }, [isContextPanelOpen])
 
     useEffect(() => {
+        if (isOpen) return
+        resetDrawerPanels()
+    }, [isOpen, resetDrawerPanels])
+
+    useEffect(() => {
         if (!isModelPanelOpen || modelSaveStatus !== 'Editing') return
 
         const timer = window.setTimeout(() => {
             if (selectedModelPresetId === NEW_MODEL_PRESET_VALUE) {
-                if (!draftModelTitle.trim() && !draftModel.trim() && !draftBaseUrl.trim() && !draftApiKey.trim()) {
+                if (!draftModel.trim() && !draftBaseUrl.trim() && !draftApiKey.trim()) {
                     setModelSaveStatus('Saved')
                     return
                 }
                 const nextId = `model_${Date.now()}`
                 const newItem: ModelPresetItem = {
                     id: nextId,
-                    title: draftModelTitle.trim() || 'Untitled model',
                     model: draftModel,
                     baseUrl: draftBaseUrl,
                     apiKey: draftApiKey,
+                    title: draftModel.trim() || undefined,
                 }
                 setModelPresets((prev) => [...prev, newItem])
                 setSelectedModelPresetId(nextId)
@@ -373,10 +396,10 @@ export function SettingsDrawer({
                 item.id === selectedModelPresetId
                     ? {
                         ...item,
-                        title: draftModelTitle.trim() || 'Untitled model',
                         model: draftModel,
                         baseUrl: draftBaseUrl,
                         apiKey: draftApiKey,
+                        title: draftModel.trim() || item.title,
                     }
                     : item,
             )
@@ -397,7 +420,6 @@ export function SettingsDrawer({
         draftApiKey,
         draftBaseUrl,
         draftModel,
-        draftModelTitle,
         isModelPanelOpen,
         modelConfig,
         modelPresets,
@@ -501,15 +523,14 @@ export function SettingsDrawer({
     const handleModelPresetSelection = (value: string) => {
         setSelectedModelPresetId(value)
         if (value === NEW_MODEL_PRESET_VALUE) {
-            setDraftModelTitle('')
             setDraftModel('')
             setDraftBaseUrl('')
             setDraftApiKey('')
             setModelSaveStatus('Saved')
+            setModelsError(null)
             return
         }
         const selected = modelPresets.find((item) => item.id === value)
-        setDraftModelTitle(selected?.title ?? '')
         setDraftModel(selected?.model ?? '')
         setDraftBaseUrl(selected?.baseUrl ?? '')
         setDraftApiKey(selected?.apiKey ?? '')
@@ -522,6 +543,7 @@ export function SettingsDrawer({
             })
         }
         setModelSaveStatus('Saved')
+        setModelsError(null)
     }
 
     const handleDeleteModelPreset = () => {
@@ -529,11 +551,11 @@ export function SettingsDrawer({
         const nextItems = modelPresets.filter((item) => item.id !== selectedModelPresetId)
         setModelPresets(nextItems)
         setSelectedModelPresetId(NEW_MODEL_PRESET_VALUE)
-        setDraftModelTitle('')
         setDraftModel('')
         setDraftBaseUrl('')
         setDraftApiKey('')
         setModelSaveStatus('Saved')
+        setModelsError(null)
     }
 
     const handleOpenContextPanel = (name: EditableContextFileName) => {
@@ -582,6 +604,14 @@ export function SettingsDrawer({
         }
     }
 
+    const handleDrawerClose = () => {
+        if (isContextPanelOpen && contextSaveStatus === 'Editing' && !selectedManagedFile) {
+            void persistContextFile(selectedContextFile, contextDrafts[selectedContextFile])
+        }
+        resetDrawerPanels()
+        onClose()
+    }
+
     return (
         <div
             className={clsx(
@@ -600,7 +630,7 @@ export function SettingsDrawer({
                 <h2 className="text-lg font-semibold text-text-primary">设置</h2>
                 <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleDrawerClose}
                     className={[
                         "flex items-center justify-center",
                         "size-8 rounded",
@@ -625,7 +655,7 @@ export function SettingsDrawer({
                             >
                                 <span className="block text-sm font-semibold text-text-primary">Model selection</span>
                                 <span className="mt-1 block text-xs text-text-secondary">
-                                    {activeModelPreset?.title || modelConfig.model || '未设置模型'}
+                                    {getModelPresetLabel(activeModelPreset) || modelConfig.model || '未设置模型'}
                                 </span>
                                 <span className="mt-1 block text-xs text-text-secondary">
                                     {modelConfig.baseUrl || 'Select a model and adjust runtime parameters'}
@@ -1151,7 +1181,7 @@ export function SettingsDrawer({
                                     <span className="truncate">
                                         {selectedModelPresetId === NEW_MODEL_PRESET_VALUE
                                             ? '+ Create new model setting'
-                                            : modelPresets.find((item) => item.id === selectedModelPresetId)?.title || 'Untitled model'}
+                                            : getModelPresetLabel(modelPresets.find((item) => item.id === selectedModelPresetId) ?? null)}
                                     </span>
                                     <ChevronDown className="size-4 text-text-muted"/>
                                 </button>
@@ -1196,7 +1226,7 @@ export function SettingsDrawer({
                                                 role="option"
                                                 aria-selected={selectedModelPresetId === item.id}
                                             >
-                                                {item.title || 'Untitled model'}
+                                                {getModelPresetLabel(item)}
                                             </button>
                                         ))}
                                     </div>
@@ -1204,15 +1234,21 @@ export function SettingsDrawer({
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <input
-                                    value={draftModelTitle}
-                                    onChange={(e) => {
-                                        setDraftModelTitle(e.target.value)
-                                        setModelSaveStatus('Editing')
-                                    }}
-                                    placeholder="Title"
-                                    className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
-                                />
+                                <div className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+                                    {draftModel ? (
+                                        <span className="text-text-primary">{draftModel}</span>
+                                    ) : (
+                                        <span className="text-text-secondary/60">点击连接获取 model name</span>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleConnectModel()}
+                                    disabled={modelsLoading || !draftBaseUrl.trim()}
+                                    className="shrink-0 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {modelsLoading ? '连接中...' : '连接'}
+                                </button>
                                 <button
                                     type="button"
                                     onClick={handleDeleteModelPreset}
@@ -1224,22 +1260,17 @@ export function SettingsDrawer({
                                 </button>
                             </div>
 
-                            <div className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
-                                {modelsLoading ? (
-                                    <span className="text-text-secondary animate-pulse">获取中...</span>
-                                ) : modelsError ? (
-                                    <span className="text-red-500">{modelsError}</span>
-                                ) : draftModel ? (
-                                    <span className="text-text-primary">{draftModel}</span>
-                                ) : (
-                                    <span className="text-text-secondary/60">填写 BaseURL 后自动获取</span>
-                                )}
-                            </div>
+                            {modelsError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                                    {modelsError}
+                                </div>
+                            )}
                             <input
                                 value={draftBaseUrl}
                                 onChange={(e) => {
                                     setDraftBaseUrl(e.target.value)
                                     setModelSaveStatus('Editing')
+                                    setModelsError(null)
                                 }}
                                 placeholder="baseUrl"
                                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
@@ -1249,6 +1280,7 @@ export function SettingsDrawer({
                                 onChange={(e) => {
                                     setDraftApiKey(e.target.value)
                                     setModelSaveStatus('Editing')
+                                    setModelsError(null)
                                 }}
                                 placeholder="apiKey"
                                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"

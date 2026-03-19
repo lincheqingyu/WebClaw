@@ -1,4 +1,5 @@
 import {
+  type ArtifactTraceItem,
   extractSessionAttachments,
   extractSessionText,
   extractSessionThinking,
@@ -7,6 +8,13 @@ import {
   type SessionProjection,
 } from '@webclaw/shared'
 import type { ChatMessage } from '../hooks/useChat'
+import {
+  isArtifactTraceItem,
+  isGeneratedFileArtifact,
+  mergeArtifacts,
+  mergeArtifactTraceItems,
+  type ChatArtifact,
+} from './artifacts'
 
 export interface SessionListItemVm {
   id: string
@@ -63,10 +71,68 @@ export function toChatMessages(records: SessionMessageRecord[]): ChatMessage[] {
     })
 }
 
+function toEntryTimestamp(timestamp: string): number {
+  const value = new Date(timestamp).getTime()
+  return Number.isNaN(value) ? Date.now() : value
+}
+
+function toHistoryThoughtTiming(step: {
+  status?: 'running' | 'completed' | 'failed'
+  startedAt?: number
+  finishedAt?: number
+  durationMs?: number
+}): ChatMessage['thoughtTiming'] {
+  if (typeof step.startedAt !== 'number') return undefined
+
+  if (step.status !== 'completed' && step.status !== 'failed') {
+    return {
+      status: 'running',
+      startedAt: step.startedAt,
+    }
+  }
+
+  return {
+    status: step.status,
+    startedAt: step.startedAt,
+    finishedAt: step.finishedAt,
+    durationMs: step.durationMs ?? (typeof step.finishedAt === 'number' ? Math.max(0, step.finishedAt - step.startedAt) : undefined),
+  }
+}
+
+function extractGeneratedArtifacts(data: unknown): ChatArtifact[] {
+  if (!data || typeof data !== 'object') return []
+  const generatedArtifacts = 'generatedArtifacts' in data
+    ? (data as { generatedArtifacts?: unknown }).generatedArtifacts
+    : 'generatedFiles' in data
+      ? (data as { generatedFiles?: unknown }).generatedFiles
+      : undefined
+  if (!Array.isArray(generatedArtifacts)) return []
+  return generatedArtifacts.filter(isGeneratedFileArtifact)
+}
+
+function extractArtifactTraceItems(data: unknown): ArtifactTraceItem[] {
+  if (!data || typeof data !== 'object') return []
+  const artifactTraceItems = 'artifactTraceItems' in data ? (data as { artifactTraceItems?: unknown }).artifactTraceItems : undefined
+  if (!Array.isArray(artifactTraceItems)) return []
+  return artifactTraceItems.filter(isArtifactTraceItem)
+}
+
 export function toChatMessagesFromHistoryView(projection: SessionProjection, entries: SessionEventEntry[]): ChatMessage[] {
   const messages: ChatMessage[] = []
   const messageById = new Map<string, ChatMessage>()
-  const stepById = new Map<string, { kind: string; todoIndex?: number; runId: string; title?: string }>()
+  const stepById = new Map<string, {
+    kind: string
+    todoIndex?: number
+    runId: string
+    title?: string
+    status?: 'running' | 'completed' | 'failed'
+    startedAt?: number
+    finishedAt?: number
+    durationMs?: number
+  }>()
+  const stepMessageById = new Map<string, string>()
+  const artifactsByStepId = new Map<string, ChatArtifact[]>()
+  const artifactTraceByStepId = new Map<string, ArtifactTraceItem[]>()
   const activeRunById = new Map<string, { mode: string; planMessageId?: string }>()
   let activeStepId: string | null = null
 
@@ -75,6 +141,44 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
   const appendMessage = (message: ChatMessage) => {
     messages.push(message)
     messageById.set(message.id, message)
+  }
+
+  const attachPendingArtifacts = (stepId: string, message: ChatMessage) => {
+    const pendingArtifacts = artifactsByStepId.get(stepId)
+    if ((pendingArtifacts?.length ?? 0) === 0) return
+
+    message.artifacts = mergeArtifacts(message.artifacts, pendingArtifacts)
+    message.artifactTraceItems = mergeArtifactTraceItems(message.artifactTraceItems, artifactTraceByStepId.get(stepId))
+    artifactsByStepId.delete(stepId)
+    artifactTraceByStepId.delete(stepId)
+  }
+
+  const ensureAssistantStepMessage = (stepId: string, index: number) => {
+    const existingId = stepMessageById.get(stepId)
+    if (existingId) {
+      const existingMessage = messageById.get(existingId) ?? null
+      if (existingMessage) {
+        attachPendingArtifacts(stepId, existingMessage)
+      }
+      return existingMessage
+    }
+
+    const id = createHistoryId('assistant', index)
+    const message: ChatMessage = {
+      id,
+      role: 'assistant',
+      content: '',
+      thinkingContent: '',
+      hasThinking: false,
+      isThinkingExpanded: false,
+      timestamp: Date.now(),
+      stepId,
+      thoughtTiming: toHistoryThoughtTiming(stepById.get(stepId) ?? {}),
+    }
+    appendMessage(message)
+    stepMessageById.set(stepId, id)
+    attachPendingArtifacts(stepId, message)
+    return message
   }
 
   entries.forEach((entry, index) => {
@@ -99,8 +203,22 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
     }
 
     if (entry.type === 'step_started') {
-      stepById.set(entry.stepId, { kind: entry.kind, todoIndex: entry.todoIndex, runId: entry.runId, title: entry.title })
+      const startedAt = entry.startedAt ?? toEntryTimestamp(entry.timestamp)
+      stepById.set(entry.stepId, {
+        kind: entry.kind,
+        todoIndex: entry.todoIndex,
+        runId: entry.runId,
+        title: entry.title,
+        status: 'running',
+        startedAt,
+      })
       activeStepId = entry.stepId
+
+      const assistantMessageId = stepMessageById.get(entry.stepId)
+      const assistantMessage = assistantMessageId ? messageById.get(assistantMessageId) : undefined
+      if (assistantMessage) {
+        assistantMessage.thoughtTiming = toHistoryThoughtTiming(stepById.get(entry.stepId) ?? {})
+      }
 
       if (entry.kind === 'task' && typeof entry.todoIndex === 'number') {
         const run = activeRunById.get(entry.runId)
@@ -166,10 +284,30 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
         }
 
         const thinkingContent = extractSessionThinking(entry.message.content)
+        const content = extractSessionText(entry.message.content)
+
+        if (step?.kind === 'simple_reply' && activeStepId) {
+          const assistantMessage = ensureAssistantStepMessage(activeStepId, index)
+          if (assistantMessage) {
+            assistantMessage.timestamp = entry.message.timestamp ?? toEntryTimestamp(entry.timestamp)
+            if (content.trim()) {
+              assistantMessage.content = content
+            }
+            if (thinkingContent.trim()) {
+              assistantMessage.thinkingContent = assistantMessage.thinkingContent?.trim()
+                ? `${assistantMessage.thinkingContent}\n\n${thinkingContent}`
+                : thinkingContent
+              assistantMessage.hasThinking = true
+            }
+            attachPendingArtifacts(activeStepId, assistantMessage)
+          }
+          return
+        }
+
         appendMessage({
           id: createHistoryId('assistant', index),
           role: 'assistant',
-          content: extractSessionText(entry.message.content),
+          content,
           thinkingContent: thinkingContent || undefined,
           hasThinking: thinkingContent.trim().length > 0,
           isThinkingExpanded: false,
@@ -188,8 +326,52 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
       return
     }
 
+    if (entry.type === 'custom' && entry.customType === 'generated_files') {
+      const stepId = entry.data && typeof entry.data === 'object' && 'stepId' in entry.data
+        ? (entry.data as { stepId?: unknown }).stepId
+        : undefined
+      const generatedArtifacts = extractGeneratedArtifacts(entry.data)
+      if (typeof stepId === 'string' && generatedArtifacts.length > 0) {
+        artifactsByStepId.set(stepId, mergeArtifacts(artifactsByStepId.get(stepId), generatedArtifacts) ?? [])
+        const assistantMessageId = stepMessageById.get(stepId)
+        const assistantMessage = assistantMessageId ? messageById.get(assistantMessageId) : undefined
+        if (assistantMessage) {
+          attachPendingArtifacts(stepId, assistantMessage)
+        }
+      }
+      return
+    }
+
+    if (entry.type === 'custom' && entry.customType === 'artifact_trace') {
+      const stepId = entry.data && typeof entry.data === 'object' && 'stepId' in entry.data
+        ? (entry.data as { stepId?: unknown }).stepId
+        : undefined
+      const artifactTraceItems = extractArtifactTraceItems(entry.data)
+      if (typeof stepId === 'string' && artifactTraceItems.length > 0) {
+        artifactTraceByStepId.set(stepId, mergeArtifactTraceItems(artifactTraceByStepId.get(stepId), artifactTraceItems) ?? [])
+        const assistantMessageId = stepMessageById.get(stepId)
+        const assistantMessage = assistantMessageId ? messageById.get(assistantMessageId) : undefined
+        if (assistantMessage && (assistantMessage.artifacts?.length ?? 0) > 0) {
+          attachPendingArtifacts(stepId, assistantMessage)
+        }
+      }
+      return
+    }
+
     if (entry.type === 'step_finished') {
       const step = stepById.get(entry.stepId)
+      const startedAt = entry.startedAt ?? step?.startedAt
+      const finishedAt = entry.finishedAt ?? toEntryTimestamp(entry.timestamp)
+      const durationMs = entry.durationMs ?? (typeof startedAt === 'number' ? Math.max(0, finishedAt - startedAt) : undefined)
+      if (step) {
+        stepById.set(entry.stepId, {
+          ...step,
+          status: entry.status,
+          startedAt,
+          finishedAt,
+          durationMs,
+        })
+      }
       if (step?.kind === 'task' && typeof entry.todoIndex === 'number') {
         const run = activeRunById.get(entry.runId)
         const planMessage = run?.planMessageId ? messageById.get(run.planMessageId) : undefined
@@ -207,6 +389,25 @@ export function toChatMessagesFromHistoryView(projection: SessionProjection, ent
               content: entry.summary ?? existing.content,
             },
           }
+        }
+      }
+
+      if (step?.kind === 'simple_reply') {
+        const assistantMessageId = stepMessageById.get(entry.stepId)
+        const assistantMessage = assistantMessageId ? messageById.get(assistantMessageId) : undefined
+        if (assistantMessage && entry.summary?.trim()) {
+          assistantMessage.content = entry.summary
+        }
+        if (assistantMessage) {
+          assistantMessage.thoughtTiming = toHistoryThoughtTiming(stepById.get(entry.stepId) ?? {})
+          attachPendingArtifacts(entry.stepId, assistantMessage)
+        }
+      }
+
+      if (!stepMessageById.has(entry.stepId) && (artifactsByStepId.get(entry.stepId)?.length ?? 0) > 0) {
+        const assistantMessage = ensureAssistantStepMessage(entry.stepId, index)
+        if (assistantMessage) {
+          assistantMessage.timestamp = finishedAt
         }
       }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChatAttachment } from '@webclaw/shared'
 import type { ChatMessage } from '../../hooks/useChat'
 import { MessageItem } from './MessageItem'
+import type { ChatArtifact } from '../../lib/artifacts'
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -12,6 +13,8 @@ interface MessageListProps {
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
   onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  onOpenArtifact?: (messageId: string, artifactIndex: number, artifact: ChatArtifact) => void
+  onDownloadArtifact?: (artifact: ChatArtifact) => void
   activeAttachmentKey?: string | null
   scrollRequestVersion?: number
   wideLayout?: boolean
@@ -29,6 +32,8 @@ export function MessageList({
   onToggleTodo,
   onTogglePlanTask,
   onOpenAttachment,
+  onOpenArtifact,
+  onDownloadArtifact,
   activeAttachmentKey = null,
   scrollRequestVersion = 0,
   wideLayout = false,
@@ -161,6 +166,8 @@ export function MessageList({
             onToggleTodo={onToggleTodo}
             onTogglePlanTask={onTogglePlanTask}
             onOpenAttachment={onOpenAttachment}
+            onOpenArtifact={onOpenArtifact}
+            onDownloadArtifact={onDownloadArtifact}
             activeAttachmentKey={activeAttachmentKey}
           />
         ))}

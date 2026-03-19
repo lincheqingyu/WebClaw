@@ -13,6 +13,7 @@ import {
 import { USE_PI_WEB_UI_PARTIAL } from '../../../config/api'
 import { PiMessageListAdapter } from '../../../adapters/pi-web-ui/PiMessageListAdapter'
 import { PiChatInputAdapter } from '../../../adapters/pi-web-ui/PiChatInputAdapter'
+import type { ChatArtifact } from '../../../lib/artifacts'
 
 interface ConversationAreaProps {
   onSettingsToggle: () => void
@@ -31,6 +32,8 @@ interface ConversationAreaProps {
   onSessionTitleUpdated: (payload: SessionTitleUpdatedPayload) => void
   onChatLifecycleEvent: (event: 'run_completed' | 'run_paused' | 'run_failed') => void
   onOpenAttachment: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  onOpenArtifact: (messageId: string, artifactIndex: number, artifact: ChatArtifact) => void
+  onDownloadArtifact: (artifact: ChatArtifact) => void
   activeAttachmentKey?: string | null
   showHeader?: boolean
   workspaceMode?: 'default' | 'split'
@@ -53,6 +56,8 @@ export function ConversationArea({
   onSessionTitleUpdated,
   onChatLifecycleEvent,
   onOpenAttachment,
+  onOpenArtifact,
+  onDownloadArtifact,
   activeAttachmentKey = null,
   showHeader = true,
   workspaceMode = 'default',
@@ -234,6 +239,8 @@ export function ConversationArea({
                 onToggleTodo={toggleTodo}
                 onTogglePlanTask={togglePlanTask}
                 onOpenAttachment={onOpenAttachment}
+                onOpenArtifact={onOpenArtifact}
+                onDownloadArtifact={onDownloadArtifact}
                 activeAttachmentKey={activeAttachmentKey}
                 scrollRequestVersion={scrollRequestVersion}
                 wideLayout={isSplitWorkspace}

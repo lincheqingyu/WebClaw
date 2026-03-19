@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createDefaultThinkingConfig, type ChatAttachment } from '@webclaw/shared'
 import { Moon, Settings, Sun } from 'lucide-react'
 import { ConversationArea } from './ConversationArea'
 import { ChatsOverview } from './ChatsOverview'
 import { DocumentPanel } from './DocumentPanel'
+import { ArtifactPanel } from '../../../components/artifacts/ArtifactPanel'
 import { SettingsDrawer } from './SettingsDrawer'
 import {
   ConversationSidebar,
@@ -19,6 +20,7 @@ import {
   deleteSession as deleteSessionByKey,
   fetchSessionHistoryView,
   fetchSessions,
+  buildArtifactDownloadUrl,
   updateSessionTitle,
 } from '../../../lib/session-api'
 import {
@@ -27,6 +29,7 @@ import {
   type SessionListItemVm,
 } from '../../../lib/session-management'
 import { getPeerId, resetPeerId, setPeerId } from '../../../lib/session'
+import type { ChatArtifact } from '../../../lib/artifacts'
 
 const STORAGE_KEYS = {
   modelConfig: 'webclaw.modelConfig',
@@ -35,12 +38,32 @@ const STORAGE_KEYS = {
   documentPanelWidth: 'webclaw.documentPanelWidth',
 }
 
-interface OpenDocument {
+const COLLAPSED_SIDEBAR_WIDTH = 64
+const EXPANDED_SIDEBAR_WIDTH = 264
+const SPLIT_DIVIDER_WIDTH = 1
+const MIN_DOCUMENT_PANEL_WIDTH = 360
+const MIN_CHAT_WORKSPACE_WIDTH = 320
+const MAX_DOCUMENT_PANEL_RATIO = 0.72
+const DEFAULT_DOCUMENT_PANEL_RATIO = 0.5
+
+interface OpenAttachmentDocument {
+  kind: 'attachment'
   key: string
   messageId: string
   attachmentIndex: number
   attachment: ChatAttachment
 }
+
+interface OpenArtifactDocument {
+  kind: 'artifact'
+  key: string
+  messageId: string
+  artifactIndex: number
+  sessionKey: string
+  artifact: ChatArtifact
+}
+
+type OpenDocument = OpenAttachmentDocument | OpenArtifactDocument
 
 function loadModelConfig(): ModelConfig {
   const defaultThinking = createDefaultThinkingConfig()
@@ -90,17 +113,34 @@ function loadDocumentPanelWidth(): number {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.documentPanelWidth)
     const parsed = Number(raw)
-    if (Number.isFinite(parsed) && parsed >= 360) return clampDocumentPanelWidth(parsed)
+    if (Number.isFinite(parsed) && parsed >= MIN_DOCUMENT_PANEL_WIDTH) return clampDocumentPanelWidth(parsed)
   } catch {
     // noop
   }
-  return 520
+  return clampDocumentPanelWidth(
+    Math.floor(getSplitWorkspaceWidth(true) * DEFAULT_DOCUMENT_PANEL_RATIO),
+    true,
+  )
 }
 
-function clampDocumentPanelWidth(width: number): number {
-  if (typeof window === 'undefined') return Math.max(360, width)
-  const max = Math.max(420, Math.floor(window.innerWidth * 0.55))
-  return Math.min(Math.max(360, width), max)
+function getSplitWorkspaceWidth(sidebarCollapsed: boolean): number {
+  if (typeof window === 'undefined') return MIN_DOCUMENT_PANEL_WIDTH + MIN_CHAT_WORKSPACE_WIDTH
+  const sidebarWidth = sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : EXPANDED_SIDEBAR_WIDTH
+  return Math.max(
+    MIN_DOCUMENT_PANEL_WIDTH + MIN_CHAT_WORKSPACE_WIDTH,
+    window.innerWidth - sidebarWidth - SPLIT_DIVIDER_WIDTH,
+  )
+}
+
+function clampDocumentPanelWidth(width: number, sidebarCollapsed = true): number {
+  if (typeof window === 'undefined') return Math.max(MIN_DOCUMENT_PANEL_WIDTH, width)
+
+  const workspaceWidth = getSplitWorkspaceWidth(sidebarCollapsed)
+  const maxByChatFloor = workspaceWidth - MIN_CHAT_WORKSPACE_WIDTH
+  const maxByRatio = Math.floor(workspaceWidth * MAX_DOCUMENT_PANEL_RATIO)
+  const max = Math.max(MIN_DOCUMENT_PANEL_WIDTH, Math.min(maxByChatFloor, maxByRatio))
+
+  return Math.min(Math.max(MIN_DOCUMENT_PANEL_WIDTH, width), max)
 }
 
 function toConversationItem(session: SessionListItemVm): ConversationItem {
@@ -133,7 +173,9 @@ export function HomePageLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed())
   const [openDocument, setOpenDocument] = useState<OpenDocument | null>(null)
   const [documentPanelWidth, setDocumentPanelWidth] = useState<number>(() => loadDocumentPanelWidth())
-  const resizeCleanupRef = useRef<(() => void) | null>(null)
+  const resizePointerIdRef = useRef<number | null>(null)
+  const resizeBodyStateRef = useRef<{ cursor: string; userSelect: string } | null>(null)
+  const [isDocumentDividerDragging, setIsDocumentDividerDragging] = useState(false)
 
   useEffect(() => {
     if (isDark) {
@@ -171,17 +213,53 @@ export function HomePageLayout() {
   }, [documentPanelWidth])
 
   useEffect(() => {
-    return () => {
-      resizeCleanupRef.current?.()
+    setDocumentPanelWidth((prev) => clampDocumentPanelWidth(prev, isSidebarCollapsed))
+  }, [isSidebarCollapsed])
+
+  const stopDocumentResize = useCallback(() => {
+    resizePointerIdRef.current = null
+    setIsDocumentDividerDragging(false)
+
+    const previousBodyState = resizeBodyStateRef.current
+    if (previousBodyState) {
+      document.body.style.cursor = previousBodyState.cursor
+      document.body.style.userSelect = previousBodyState.userSelect
+      resizeBodyStateRef.current = null
     }
   }, [])
+
+  useEffect(() => () => {
+    stopDocumentResize()
+  }, [stopDocumentResize])
+
+  useEffect(() => {
+    if (!isDocumentDividerDragging) return
+
+    const handleWindowPointerUp = () => {
+      stopDocumentResize()
+    }
+
+    const handleWindowBlur = () => {
+      stopDocumentResize()
+    }
+
+    window.addEventListener('pointerup', handleWindowPointerUp)
+    window.addEventListener('pointercancel', handleWindowPointerUp)
+    window.addEventListener('blur', handleWindowBlur)
+
+    return () => {
+      window.removeEventListener('pointerup', handleWindowPointerUp)
+      window.removeEventListener('pointercancel', handleWindowPointerUp)
+      window.removeEventListener('blur', handleWindowBlur)
+    }
+  }, [isDocumentDividerDragging, stopDocumentResize])
 
   const activeSession = useMemo(() => {
     const targetKey = selectedSessionKey ?? currentSessionKey
     return sessionItems.find((item) => item.id === targetKey) ?? null
   }, [currentSessionKey, selectedSessionKey, sessionItems])
 
-  const conversationTitle = activeSession?.title ?? '新会话'
+  const conversationTitle = activeSession?.title ?? ''
   const canSend = !isHistoryLoading && !chatDisabledReason
   const inputHint = isHistoryLoading ? '正在加载会话历史...' : chatDisabledReason
 
@@ -321,14 +399,54 @@ export function HomePageLayout() {
     setIsSettingsOpen(false)
     setIsSidebarCollapsed(true)
     if (!openDocument) {
-      setDocumentPanelWidth(clampDocumentPanelWidth(Math.floor((window.innerWidth - 64) / 2)))
+      setDocumentPanelWidth(
+        clampDocumentPanelWidth(
+          Math.floor(getSplitWorkspaceWidth(true) * DEFAULT_DOCUMENT_PANEL_RATIO),
+          true,
+        ),
+      )
     }
     setOpenDocument({
+      kind: 'attachment',
       key: `${messageId}:${attachmentIndex}`,
       messageId,
       attachmentIndex,
       attachment,
     })
+  }
+
+  const handleOpenArtifact = (messageId: string, artifactIndex: number, artifact: ChatArtifact) => {
+    const sessionKey = selectedSessionKey ?? currentSessionKey
+    if (!sessionKey) return
+    setIsSettingsOpen(false)
+    setIsSidebarCollapsed(true)
+    if (!openDocument) {
+      setDocumentPanelWidth(
+        clampDocumentPanelWidth(
+          Math.floor(getSplitWorkspaceWidth(true) * DEFAULT_DOCUMENT_PANEL_RATIO),
+          true,
+        ),
+      )
+    }
+    setOpenDocument({
+      kind: 'artifact',
+      key: `${messageId}:artifact:${artifactIndex}`,
+      messageId,
+      artifactIndex,
+      sessionKey,
+      artifact,
+    })
+  }
+
+  const handleDownloadArtifact = (artifact: ChatArtifact) => {
+    const sessionKey = selectedSessionKey ?? currentSessionKey
+    if (!sessionKey || artifact.status === 'draft') return
+    const link = document.createElement('a')
+    link.href = buildArtifactDownloadUrl(sessionKey, artifact.artifactId)
+    link.download = artifact.name
+    link.target = '_blank'
+    link.rel = 'noreferrer'
+    link.click()
   }
 
   const handleCloseDocument = () => {
@@ -345,38 +463,45 @@ export function HomePageLayout() {
     })
   }
 
-  const handleDocumentResizeStart = (
-    event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
-  ) => {
+  const updateDocumentPanelWidth = useCallback((clientX: number) => {
+    setDocumentPanelWidth(clampDocumentPanelWidth(window.innerWidth - clientX, isSidebarCollapsed))
+  }, [isSidebarCollapsed])
+
+  const handleDocumentResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
     event.preventDefault()
 
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
+    resizeBodyStateRef.current = {
+      cursor: document.body.style.cursor,
+      userSelect: document.body.style.userSelect,
+    }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
-    const handleMove = (moveEvent: PointerEvent | MouseEvent) => {
-      setDocumentPanelWidth(clampDocumentPanelWidth(window.innerWidth - moveEvent.clientX))
+    resizePointerIdRef.current = event.pointerId
+    setIsDocumentDividerDragging(true)
+    updateDocumentPanelWidth(event.clientX)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handleDocumentResizeMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizePointerIdRef.current !== event.pointerId) return
+    updateDocumentPanelWidth(event.clientX)
+  }
+
+  const handleDocumentResizeEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizePointerIdRef.current !== event.pointerId) return
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
     }
 
-    const stop = () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', stop)
-      window.removeEventListener('pointercancel', stop)
-      window.removeEventListener('mousemove', handleMove)
-      window.removeEventListener('mouseup', stop)
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-      resizeCleanupRef.current = null
-    }
+    stopDocumentResize()
+  }
 
-    resizeCleanupRef.current?.()
-    resizeCleanupRef.current = stop
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    window.addEventListener('mousemove', handleMove)
-    window.addEventListener('mouseup', stop)
+  const handleDocumentResizeLostCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizePointerIdRef.current !== event.pointerId) return
+    stopDocumentResize()
   }
 
   return (
@@ -485,6 +610,8 @@ export function HomePageLayout() {
                   onSessionTitleUpdated={handleSessionTitleUpdated}
                   onChatLifecycleEvent={handleChatLifecycleEvent}
                   onOpenAttachment={handleOpenAttachment}
+                  onOpenArtifact={handleOpenArtifact}
+                  onDownloadArtifact={handleDownloadArtifact}
                   activeAttachmentKey={openDocument.key}
                   showHeader={false}
                   workspaceMode="split"
@@ -495,19 +622,48 @@ export function HomePageLayout() {
                 role="separator"
                 aria-orientation="vertical"
                 aria-label="调整文档面板宽度"
-                onPointerDown={handleDocumentResizeStart}
-                onMouseDown={handleDocumentResizeStart}
-                className="group relative hidden w-5 shrink-0 cursor-col-resize bg-transparent md:block"
-                style={{ touchAction: 'none' }}
+                className="relative hidden w-px shrink-0 self-stretch md:block"
               >
-                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-[color:var(--border-strong)]" />
-                <div className="absolute left-1/2 top-1/2 h-14 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/70 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.14)] transition-transform group-hover:scale-105 dark:bg-surface" />
+                <div
+                  onPointerDown={handleDocumentResizeStart}
+                  onPointerMove={handleDocumentResizeMove}
+                  onPointerUp={handleDocumentResizeEnd}
+                  onPointerCancel={handleDocumentResizeEnd}
+                  onLostPointerCapture={handleDocumentResizeLostCapture}
+                  className="group absolute inset-y-0 left-1/2 w-4 -translate-x-1/2 cursor-col-resize touch-none"
+                >
+                  <div
+                    className={[
+                      'absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors duration-150',
+                      isDocumentDividerDragging
+                        ? 'bg-[color:var(--border-strong)]'
+                        : 'bg-border group-hover:bg-[color:var(--border-strong)]',
+                    ].join(' ')}
+                  />
+                  <div
+                    className={[
+                      'absolute left-1/2 top-1/2 h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-1 ring-black/6 transition-all duration-150 dark:bg-surface',
+                      isDocumentDividerDragging
+                        ? 'shadow-[0_8px_18px_rgba(15,23,42,0.18)]'
+                        : 'shadow-[0_4px_10px_rgba(15,23,42,0.12)] group-hover:shadow-[0_6px_14px_rgba(15,23,42,0.16)]',
+                    ].join(' ')}
+                  />
+                </div>
               </div>
-              <DocumentPanel
-                document={openDocument}
-                width={documentPanelWidth}
-                onClose={handleCloseDocument}
-              />
+              {openDocument.kind === 'attachment' ? (
+                <DocumentPanel
+                  document={openDocument}
+                  width={documentPanelWidth}
+                  onClose={handleCloseDocument}
+                />
+              ) : (
+                <ArtifactPanel
+                  sessionKey={openDocument.sessionKey}
+                  artifact={openDocument.artifact}
+                  width={documentPanelWidth}
+                  onClose={handleCloseDocument}
+                />
+              )}
             </div>
           </div>
         ) : (
@@ -528,6 +684,8 @@ export function HomePageLayout() {
             onSessionTitleUpdated={handleSessionTitleUpdated}
             onChatLifecycleEvent={handleChatLifecycleEvent}
             onOpenAttachment={handleOpenAttachment}
+            onOpenArtifact={handleOpenArtifact}
+            onDownloadArtifact={handleDownloadArtifact}
             activeAttachmentKey={null}
             showHeader
             workspaceMode="default"

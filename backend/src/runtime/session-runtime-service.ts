@@ -1,13 +1,16 @@
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core'
 import type { ImageContent, Message, Model, TextContent, UserMessage } from '@mariozechner/pi-ai'
 import type {
+  ArtifactDetail,
+  ArtifactTraceItem,
   ChatAttachment,
   ChatFileAttachment,
   ClientEventPayloadMap,
   ClientModelOptions,
+  GeneratedFileArtifact,
   PausePacket,
   RunId,
   SerializedTodoItem,
@@ -53,6 +56,11 @@ interface ActiveRunHandle {
   readonly abortController: AbortController
 }
 
+interface ResolvedArtifactHandle {
+  readonly artifact: GeneratedFileArtifact
+  readonly fullPath: string
+}
+
 export interface SessionDetail {
   entry: SessionProjection
   snapshot: { projection: SessionProjection } | null
@@ -72,6 +80,9 @@ interface StepLifecycle {
   readonly kind: StepKind
   readonly title?: string
   readonly todoIndex?: number
+  readonly startedAt?: number
+  readonly finishedAt?: number
+  readonly durationMs?: number
 }
 
 export interface SendRunResult {
@@ -98,6 +109,118 @@ function summarizeToolResultDetail(result: unknown): string | undefined {
   const content = 'content' in result ? (result as { content?: unknown }).content : undefined
   const summary = summarizeContent(content)
   return summary.length > 0 ? summary : undefined
+}
+
+const ARTIFACT_DOCS_DIR = '.ZxhClaw/artifacts/docs'
+const ARTIFACT_DOCS_ROOT = resolve(process.cwd(), ARTIFACT_DOCS_DIR)
+const WHITESPACE_PATTERN = /\s+/g
+
+function normalizeWorkspacePath(filePath: string): string {
+  return filePath.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+}
+
+function resolveArtifactPath(filePath: string): string {
+  const normalized = normalizeWorkspacePath(filePath)
+  const absolutePath = resolve(process.cwd(), normalized)
+  if (!absolutePath.startsWith(ARTIFACT_DOCS_ROOT)) {
+    throw new Error(`artifact 路径不在允许目录内: ${filePath}`)
+  }
+  return absolutePath
+}
+
+function summarizeCommand(command: string): string {
+  const normalized = command.replace(WHITESPACE_PATTERN, ' ').trim()
+  if (!normalized) return 'command'
+
+  const redacted = normalized
+    .replace(/(\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*)(["']?)[^\s"']+\2/gi, '$1[REDACTED]')
+    .replace(/(--(?:api-key|token|secret|password)\s+)(\S+)/gi, '$1[REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]+\b/g, '[REDACTED]')
+
+  return redacted.length > 120 ? `${redacted.slice(0, 117)}...` : redacted
+}
+
+function isGeneratedFileArtifact(value: unknown): value is GeneratedFileArtifact {
+  if (!value || typeof value !== 'object') return false
+  const artifactId = 'artifactId' in value ? (value as { artifactId?: unknown }).artifactId : undefined
+  const filePath = 'filePath' in value ? (value as { filePath?: unknown }).filePath : undefined
+  const name = 'name' in value ? (value as { name?: unknown }).name : undefined
+  const mimeType = 'mimeType' in value ? (value as { mimeType?: unknown }).mimeType : undefined
+  const size = 'size' in value ? (value as { size?: unknown }).size : undefined
+  const createdAt = 'createdAt' in value ? (value as { createdAt?: unknown }).createdAt : undefined
+  const updatedAt = 'updatedAt' in value ? (value as { updatedAt?: unknown }).updatedAt : undefined
+
+  return (
+    typeof artifactId === 'string'
+    && typeof filePath === 'string'
+    && typeof name === 'string'
+    && typeof mimeType === 'string'
+    && typeof size === 'number'
+    && typeof createdAt === 'number'
+    && typeof updatedAt === 'number'
+  )
+}
+
+function extractGeneratedArtifactsFromToolResult(result: unknown): GeneratedFileArtifact[] {
+  if (!result || typeof result !== 'object') return []
+  const details = 'details' in result ? (result as { details?: unknown }).details : undefined
+  if (!details || typeof details !== 'object') return []
+  const generatedFiles = 'generatedFiles' in details ? (details as { generatedFiles?: unknown }).generatedFiles : undefined
+  if (!Array.isArray(generatedFiles)) return []
+  return generatedFiles.filter(isGeneratedFileArtifact)
+}
+
+function buildArtifactTraceItems(stepId: StepId, toolName: string, args: unknown, result: unknown): ArtifactTraceItem[] {
+  const timestamp = Date.now()
+  if (toolName === 'read_file') {
+    const path = args && typeof args === 'object' && 'path' in args ? (args as { path?: unknown }).path : undefined
+    if (typeof path !== 'string' || !path.trim()) return []
+    return [{
+      traceId: `trace_${timestamp}_${Math.random().toString(16).slice(2, 8)}`,
+      stepId,
+      toolName,
+      kind: 'viewed_file',
+      title: '读取文件',
+      subtitle: 'Viewed a file',
+      detail: basename(path),
+      timestamp,
+    }]
+  }
+
+  if (toolName === 'write_file') {
+    const details = result && typeof result === 'object' && 'details' in result ? (result as { details?: unknown }).details : undefined
+    if (!details || typeof details !== 'object') return []
+    const outputPath = 'outputPath' in details ? (details as { outputPath?: unknown }).outputPath : undefined
+    const writeMode = 'writeMode' in details ? (details as { writeMode?: unknown }).writeMode : undefined
+    if (typeof outputPath !== 'string' || (writeMode !== 'created' && writeMode !== 'updated')) return []
+    return [{
+      traceId: `trace_${timestamp}_${Math.random().toString(16).slice(2, 8)}`,
+      stepId,
+      toolName,
+      kind: writeMode === 'created' ? 'created_file' : 'updated_file',
+      title: writeMode === 'created' ? '创建文件' : '更新文件',
+      subtitle: writeMode === 'created' ? 'Created a file' : 'Updated a file',
+      detail: basename(outputPath),
+      timestamp,
+    }]
+  }
+
+  if (toolName === 'bash') {
+    const command = args && typeof args === 'object' && 'command' in args ? (args as { command?: unknown }).command : undefined
+    if (typeof command !== 'string' || !command.trim()) return []
+    return [{
+      traceId: `trace_${timestamp}_${Math.random().toString(16).slice(2, 8)}`,
+      stepId,
+      toolName,
+      kind: 'ran_command',
+      title: '运行命令',
+      subtitle: 'Ran a command',
+      detail: summarizeCommand(command),
+      timestamp,
+    }]
+  }
+
+  return []
 }
 
 function lastAssistantText(messages: AgentMessage[]): string {
@@ -243,9 +366,16 @@ async function readJsonOrFallback<T>(path: string, fallback: T): Promise<T> {
 }
 
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  const tmpPath = `${path}.tmp`
+  await mkdir(dirname(path), { recursive: true })
+  const tmpPath = `${path}.${process.pid}.${Date.now()}_${Math.random().toString(16).slice(2, 8)}.tmp`
+
   await writeFile(tmpPath, JSON.stringify(value, null, 2), 'utf8')
-  await rename(tmpPath, path)
+  try {
+    await rename(tmpPath, path)
+  } catch (error) {
+    await rm(tmpPath, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 export class SessionRuntimeService {
@@ -256,6 +386,7 @@ export class SessionRuntimeService {
   private readonly notifiers = new Map<string, (event: keyof ServerEventPayloadMap, payload: ServerEventPayloadMap[keyof ServerEventPayloadMap]) => void>()
   private readonly activeRuns = new Map<string, ActiveRunHandle>()
   private readonly locks = new Map<string, Promise<void>>()
+  private readonly toolArgsByCallId = new Map<string, unknown>()
 
   constructor(config = getConfig()) {
     this.cfg = config
@@ -291,6 +422,10 @@ export class SessionRuntimeService {
 
   private notify<T extends keyof ServerEventPayloadMap>(sessionKey: string, event: T, payload: ServerEventPayloadMap[T]): void {
     this.notifiers.get(sessionKey)?.(event, payload)
+  }
+
+  private getToolCallKey(sessionKey: string, runId: RunId, toolCallId: string): string {
+    return `${sessionKey}:${runId}:${toolCallId}`
   }
 
   private async persistIndex(): Promise<void> {
@@ -467,6 +602,23 @@ export class SessionRuntimeService {
     }
   }
 
+  async getArtifactDetail(sessionKeyOrSessionId: string, artifactId: string): Promise<ArtifactDetail | null> {
+    const resolved = await this.resolveArtifactHandle(sessionKeyOrSessionId, artifactId)
+    if (!resolved) return null
+    const content = await readFile(resolved.fullPath, 'utf8')
+    const stats = await stat(resolved.fullPath)
+    return {
+      ...resolved.artifact,
+      size: stats.size,
+      updatedAt: stats.mtimeMs || resolved.artifact.updatedAt,
+      content,
+    }
+  }
+
+  async getArtifactDownload(sessionKeyOrSessionId: string, artifactId: string): Promise<ResolvedArtifactHandle | null> {
+    return await this.resolveArtifactHandle(sessionKeyOrSessionId, artifactId)
+  }
+
   async getSession(sessionKeyOrSessionId: string): Promise<SessionDetail | null> {
     const projection = this.findProjection(sessionKeyOrSessionId)
     if (!projection) return null
@@ -640,6 +792,40 @@ export class SessionRuntimeService {
     return null
   }
 
+  private async resolveArtifactHandle(sessionKeyOrSessionId: string, artifactId: string): Promise<ResolvedArtifactHandle | null> {
+    const projection = this.findProjection(sessionKeyOrSessionId)
+    if (!projection) return null
+    const latest = await this.refreshProjection(projection.key)
+    const manager = this.getOrCreateManager(latest.key, latest)
+
+    for (const entry of manager.getEntries()) {
+      if (entry.type !== 'custom' || entry.customType !== 'generated_files' || !entry.data || typeof entry.data !== 'object') {
+        continue
+      }
+      const generatedArtifacts = 'generatedArtifacts' in entry.data
+        ? (entry.data as { generatedArtifacts?: unknown }).generatedArtifacts
+        : undefined
+      if (!Array.isArray(generatedArtifacts)) continue
+
+      const artifact = generatedArtifacts.find((candidate) =>
+        isGeneratedFileArtifact(candidate)
+        && candidate.artifactId === artifactId,
+      )
+      if (!artifact || !isGeneratedFileArtifact(artifact)) continue
+
+      const fullPath = resolveArtifactPath(artifact.filePath)
+      if (!existsSync(fullPath)) {
+        return null
+      }
+      return {
+        artifact,
+        fullPath,
+      }
+    }
+
+    return null
+  }
+
   private createModel(options: ClientModelOptions): Model<'openai-completions'> {
     return createVllmModel({
       modelId: options.model,
@@ -681,10 +867,51 @@ export class SessionRuntimeService {
       stepId: step.stepId,
       kind: step.kind,
       status,
+      startedAt: step.startedAt,
+      finishedAt: step.finishedAt,
+      durationMs: step.durationMs,
       title: step.title,
       todoIndex: step.todoIndex,
       summary,
     })
+  }
+
+  private async beginStep(bound: BoundSession, runId: RunId, step: StepLifecycle): Promise<StepLifecycle> {
+    const entry = bound.manager.appendStepStarted(runId, step.stepId, step.kind, step.title, step.todoIndex)
+    const activeStep = {
+      ...step,
+      startedAt: entry.startedAt,
+    }
+    await this.refreshProjection(bound.projection.key)
+    this.emitStepState(bound.projection.key, runId, activeStep, 'started')
+    return activeStep
+  }
+
+  private async finishStep(
+    bound: BoundSession,
+    runId: RunId,
+    step: StepLifecycle,
+    status: 'completed' | 'failed',
+    summary?: string,
+  ): Promise<StepLifecycle> {
+    const entry = bound.manager.appendStepFinished(
+      runId,
+      step.stepId,
+      step.kind,
+      status,
+      summary,
+      step.todoIndex,
+      { startedAt: step.startedAt },
+    )
+    const finishedStep = {
+      ...step,
+      startedAt: entry.startedAt ?? step.startedAt,
+      finishedAt: entry.finishedAt,
+      durationMs: entry.durationMs,
+    }
+    await this.refreshProjection(bound.projection.key)
+    this.emitStepState(bound.projection.key, runId, finishedStep, status, summary)
+    return finishedStep
   }
 
   private emitStepDelta(
@@ -710,7 +937,7 @@ export class SessionRuntimeService {
     stepId: StepId | undefined,
     status: 'start' | 'end',
     toolName: string,
-    extra: { args?: unknown; summary?: string; detail?: string; isError?: boolean } = {},
+    extra: { args?: unknown; summary?: string; detail?: string; isError?: boolean; generatedArtifacts?: GeneratedFileArtifact[]; artifactTraceItems?: ArtifactTraceItem[] } = {},
   ): void {
     this.notify(sessionKey, 'tool_state', {
       sessionKey,
@@ -722,6 +949,8 @@ export class SessionRuntimeService {
       summary: extra.summary,
       detail: extra.detail,
       isError: extra.isError,
+      generatedArtifacts: extra.generatedArtifacts,
+      artifactTraceItems: extra.artifactTraceItems,
     })
   }
 
@@ -823,21 +1052,19 @@ export class SessionRuntimeService {
     thinkingLevel: ReturnType<typeof resolveThinkingLevel>,
     mode: SessionMode = 'simple',
   ): Promise<string> {
-    const step: StepLifecycle = {
+    let step: StepLifecycle = {
       stepId: createStepId(),
       kind: 'simple_reply',
       title: '生成回复',
     }
 
     const sessionKey = bound.projection.key
-    bound.manager.appendStepStarted(runId, step.stepId, step.kind, step.title)
-    await this.refreshProjection(sessionKey)
-    this.emitStepState(sessionKey, runId, step, 'started')
+    step = await this.beginStep(bound, runId, step)
 
-      const result = await runSimpleAgent({
-        messages: [
-          createAgentUserMessage(_userMessage as SessionMessageRecord),
-        ],
+    const result = await runSimpleAgent({
+      messages: [
+        createAgentUserMessage(_userMessage as SessionMessageRecord),
+      ],
       contextMessages,
       model,
       apiKey,
@@ -849,7 +1076,7 @@ export class SessionRuntimeService {
       route: bound.projection.route,
       mode,
       onEvent: (event) => {
-        this.handleAgentEvent(sessionKey, runId, step, event)
+        this.handleAgentEvent(bound.manager, sessionKey, runId, step, event)
       },
     })
 
@@ -861,9 +1088,7 @@ export class SessionRuntimeService {
     }
 
     const reply = lastAssistantText(newMessages)
-    bound.manager.appendStepFinished(runId, step.stepId, step.kind, 'completed', reply)
-    await this.refreshProjection(sessionKey)
-    this.emitStepState(sessionKey, runId, step, 'completed', reply)
+    await this.finishStep(bound, runId, step, 'completed', reply)
     return reply
   }
 
@@ -887,14 +1112,12 @@ export class SessionRuntimeService {
     }
 
     if (!resumePause) {
-      const plannerStep: StepLifecycle = {
+      let plannerStep: StepLifecycle = {
         stepId: createStepId(),
         kind: 'planner',
         title: '生成计划',
       }
-      bound.manager.appendStepStarted(runId, plannerStep.stepId, plannerStep.kind, plannerStep.title)
-      await this.refreshProjection(sessionKey)
-      this.emitStepState(sessionKey, runId, plannerStep, 'started')
+      plannerStep = await this.beginStep(bound, runId, plannerStep)
 
       const managerResult = await runManagerAgent({
         messages: [
@@ -910,7 +1133,7 @@ export class SessionRuntimeService {
         todoManager,
         route: bound.projection.route,
         onEvent: (event) => {
-          this.handleAgentEvent(sessionKey, runId, plannerStep, event)
+          this.handleAgentEvent(bound.manager, sessionKey, runId, plannerStep, event)
         },
       })
 
@@ -922,11 +1145,10 @@ export class SessionRuntimeService {
           prompt: managerResult.pause.prompt,
           createdAt: Date.now(),
         }
-        bound.manager.appendStepFinished(runId, plannerStep.stepId, plannerStep.kind, 'completed', '等待用户补充信息')
+        await this.finishStep(bound, runId, plannerStep, 'completed', '等待用户补充信息')
         bound.manager.appendPauseRequested(pause)
         bound.manager.appendRunFinished(runId, 'paused')
         await this.refreshProjection(sessionKey)
-        this.emitStepState(sessionKey, runId, plannerStep, 'completed', '等待用户补充信息')
         this.notify(sessionKey, 'pause_requested', {
           sessionKey,
           runId,
@@ -951,9 +1173,7 @@ export class SessionRuntimeService {
         items,
       })
 
-      bound.manager.appendStepFinished(runId, plannerStep.stepId, plannerStep.kind, 'completed', `生成 ${items.length} 个任务`)
-      await this.refreshProjection(sessionKey)
-      this.emitStepState(sessionKey, runId, plannerStep, 'completed', `生成 ${items.length} 个任务`)
+      await this.finishStep(bound, runId, plannerStep, 'completed', `生成 ${items.length} 个任务`)
     }
 
     let injectedInput = resumePause ? extractSessionText((_userMessage as SessionMessageRecord).content) : undefined
@@ -974,15 +1194,13 @@ export class SessionRuntimeService {
         })
       }
 
-      const step: StepLifecycle = {
+      let step: StepLifecycle = {
         stepId: createStepId(),
         kind: 'task',
         title: item.activeForm,
         todoIndex: index,
       }
-      bound.manager.appendStepStarted(runId, step.stepId, step.kind, step.title, step.todoIndex)
-      await this.refreshProjection(sessionKey)
-      this.emitStepState(sessionKey, runId, step, 'started')
+      step = await this.beginStep(bound, runId, step)
 
       const prompt = injectedInput
         ? `${item.content}\n\n用户补充信息：\n${injectedInput}`
@@ -999,7 +1217,7 @@ export class SessionRuntimeService {
         signal,
         route: bound.projection.route,
         onEvent: (event) => {
-          this.handleAgentEvent(sessionKey, runId, step, event)
+          this.handleAgentEvent(bound.manager, sessionKey, runId, step, event)
         },
       })
 
@@ -1011,12 +1229,11 @@ export class SessionRuntimeService {
           prompt: workerResult.pause.prompt,
           createdAt: Date.now(),
         }
+        await this.finishStep(bound, runId, step, 'completed', '等待用户补充信息')
         bound.manager.appendPauseRequested(pause)
-        bound.manager.appendStepFinished(runId, step.stepId, step.kind, 'completed', '等待用户补充信息', index)
         bound.manager.appendTodoUpdated(runId, todoManager.getItems().map((todo) => ({ ...todo })))
         bound.manager.appendRunFinished(runId, 'paused')
         await this.refreshProjection(sessionKey)
-        this.emitStepState(sessionKey, runId, step, 'completed', '等待用户补充信息')
         this.notify(sessionKey, 'pause_requested', {
           sessionKey,
           runId,
@@ -1032,14 +1249,12 @@ export class SessionRuntimeService {
         false,
       )
       bound.manager.appendTodoUpdated(runId, todoManager.getItems().map((todo) => ({ ...todo })))
-      bound.manager.appendStepFinished(runId, step.stepId, step.kind, 'completed', workerResult.result, index)
-      await this.refreshProjection(sessionKey)
+      await this.finishStep(bound, runId, step, 'completed', workerResult.result)
       this.notify(sessionKey, 'todo_state', {
         sessionKey,
         runId,
         items: todoManager.getItems().map((todo) => ({ ...todo })),
       })
-      this.emitStepState(sessionKey, runId, step, 'completed', workerResult.result)
     }
 
     const finalContextMessages = bound.manager.buildSessionContext().messages
@@ -1073,6 +1288,7 @@ export class SessionRuntimeService {
   }
 
   private handleAgentEvent(
+    manager: SessionManager,
     sessionKey: string,
     runId: RunId,
     step: StepLifecycle,
@@ -1091,6 +1307,7 @@ export class SessionRuntimeService {
     }
 
     if (event.type === 'tool_execution_start') {
+      this.toolArgsByCallId.set(this.getToolCallKey(sessionKey, runId, event.toolCallId), event.args)
       logger.debug('工具开始执行', {
         sessionKey,
         runId,
@@ -1105,6 +1322,10 @@ export class SessionRuntimeService {
 
     if (event.type === 'tool_execution_end') {
       const detail = summarizeToolResultDetail(event.result)
+      const toolArgs = this.toolArgsByCallId.get(this.getToolCallKey(sessionKey, runId, event.toolCallId))
+      this.toolArgsByCallId.delete(this.getToolCallKey(sessionKey, runId, event.toolCallId))
+      const generatedArtifacts = event.isError ? [] : extractGeneratedArtifactsFromToolResult(event.result)
+      const artifactTraceItems = event.isError ? [] : buildArtifactTraceItems(step.stepId, event.toolName, toolArgs, event.result)
       if (event.isError) {
         logger.warn('工具执行失败', {
           sessionKey,
@@ -1124,10 +1345,26 @@ export class SessionRuntimeService {
           detail,
         })
       }
+      if (artifactTraceItems.length > 0) {
+        manager.appendCustomEntry('artifact_trace', {
+          stepId: step.stepId,
+          toolName: event.toolName,
+          artifactTraceItems,
+        })
+      }
+      if (generatedArtifacts.length > 0) {
+        manager.appendCustomEntry('generated_files', {
+          stepId: step.stepId,
+          toolName: event.toolName,
+          generatedArtifacts,
+        })
+      }
       this.emitToolState(sessionKey, runId, step.stepId, 'end', event.toolName, {
         summary: event.isError ? 'tool error' : 'tool completed',
         detail,
         isError: event.isError,
+        generatedArtifacts,
+        artifactTraceItems,
       })
     }
   }

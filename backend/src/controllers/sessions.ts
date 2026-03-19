@@ -67,6 +67,38 @@ router.get('/sessions/:sessionKey/history-view', async (req, res, next) => {
   }
 })
 
+router.get('/sessions/:sessionKey/artifacts/:artifactId', async (req, res, next) => {
+  try {
+    const artifact = await getSessionRuntimeService().getArtifactDetail(req.params.sessionKey, req.params.artifactId)
+    if (!artifact) {
+      throw createHttpError(404, `artifact 不存在: ${req.params.artifactId}`)
+    }
+
+    res.json({
+      success: true,
+      data: {
+        sessionKey: req.params.sessionKey,
+        artifact,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get('/sessions/:sessionKey/artifacts/:artifactId/download', async (req, res, next) => {
+  try {
+    const artifact = await getSessionRuntimeService().getArtifactDownload(req.params.sessionKey, req.params.artifactId)
+    if (!artifact) {
+      throw createHttpError(404, `artifact 不存在: ${req.params.artifactId}`)
+    }
+
+    res.download(artifact.fullPath, artifact.artifact.name)
+  } catch (error) {
+    next(error)
+  }
+})
+
 router.get('/sessions/:sessionKey', async (req, res, next) => {
   try {
     const parsed = detailQuerySchema.safeParse(req.query)

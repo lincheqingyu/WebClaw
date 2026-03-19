@@ -1,5 +1,5 @@
 import { API_V1 } from '../config/api'
-import type { SessionEventEntry, SessionMessageRecord, SessionProjection } from '@webclaw/shared'
+import type { ArtifactDetail, SessionEventEntry, SessionMessageRecord, SessionProjection } from '@webclaw/shared'
 
 interface ApiEnvelope<T> {
   success: boolean
@@ -23,6 +23,11 @@ interface SessionHistoryViewResponse {
 
 interface SessionUpdateResponse {
   session: SessionProjection
+}
+
+interface ArtifactDetailResponse {
+  sessionKey: string
+  artifact: ArtifactDetail
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -51,6 +56,20 @@ export async function fetchSessionHistoryView(sessionKey: string): Promise<Sessi
   const response = await fetch(`${API_V1}/sessions/${encodedKey}/history-view`)
   const payload = await readJson<ApiEnvelope<SessionHistoryViewResponse>>(response)
   return payload.data
+}
+
+export async function fetchArtifactDetail(sessionKey: string, artifactId: string): Promise<ArtifactDetail> {
+  const encodedKey = encodeURIComponent(sessionKey)
+  const encodedArtifactId = encodeURIComponent(artifactId)
+  const response = await fetch(`${API_V1}/sessions/${encodedKey}/artifacts/${encodedArtifactId}`)
+  const payload = await readJson<ApiEnvelope<ArtifactDetailResponse>>(response)
+  return payload.data.artifact
+}
+
+export function buildArtifactDownloadUrl(sessionKey: string, artifactId: string): string {
+  const encodedKey = encodeURIComponent(sessionKey)
+  const encodedArtifactId = encodeURIComponent(artifactId)
+  return `${API_V1}/sessions/${encodedKey}/artifacts/${encodedArtifactId}/download`
 }
 
 export async function deleteSession(sessionKey: string): Promise<void> {

@@ -1,9 +1,13 @@
 import clsx from 'clsx'
-import { Check, ChevronDown, ChevronUp, Copy, FileText, ListTodo, RotateCcw, Sparkles } from 'lucide-react'
-import { useState, type FocusEvent, type ReactNode } from 'react'
+import { Check, ChevronDown, ChevronUp, Copy, ListTodo, RotateCcw, Sparkles } from 'lucide-react'
+import { useEffect, useState, type FocusEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../../hooks/useChat'
 import { buildAttachmentPreviewUrl } from '../../lib/chat-attachments'
 import type { ChatAttachment } from '@webclaw/shared'
+import { ArtifactCard } from '../artifacts/ArtifactCard'
+import { ArtifactTrace } from '../artifacts/ArtifactTrace'
+import { AttachmentFileCard } from '../files/AttachmentFileCard'
+import type { ChatArtifact } from '../../lib/artifacts'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -12,8 +16,12 @@ interface MessageItemProps {
   onToggleTodo?: (messageId: string) => void
   onTogglePlanTask?: (messageId: string, todoIndex: number) => void
   onOpenAttachment?: (messageId: string, attachmentIndex: number, attachment: ChatAttachment) => void
+  onOpenArtifact?: (messageId: string, artifactIndex: number, artifact: ChatArtifact) => void
+  onDownloadArtifact?: (artifact: ChatArtifact) => void
   activeAttachmentKey?: string | null
 }
+
+const THOUGHT_TIMER_INTERVAL_MS = 100
 
 function formatAttachmentMeta(attachment: ChatAttachment): string {
   const sizeLabel = attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : null
@@ -457,6 +465,23 @@ function renderTextBlock(block: string, blockIndex: number): ReactNode {
   return <div className="space-y-2">{nodes}</div>
 }
 
+function isPlainThoughtText(text: string): boolean {
+  const normalized = text.trim()
+  if (!normalized) return true
+
+  return !(
+    /```/.test(normalized)
+    || /(^|\n)\s*#{1,6}\s+/m.test(normalized)
+    || /(^|\n)\s*>\s+/m.test(normalized)
+    || /(^|\n)\s*[-*]\s+/m.test(normalized)
+    || /(^|\n)\s*\d+\.\s+/m.test(normalized)
+    || /(^|\n)\s*\|.+\|\s*$/m.test(normalized)
+    || /\[[^\]]+\]\([^)]+\)/.test(normalized)
+    || /`[^`]+`/.test(normalized)
+    || /\*\*[^*]+\*\*/.test(normalized)
+  )
+}
+
 function MarkdownPreviewBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -540,6 +565,23 @@ function getEventLabel(eventType?: string) {
   }
 }
 
+function formatThoughtDuration(durationMs: number): string {
+  const safeDuration = Math.max(0, durationMs)
+  const hours = Math.floor(safeDuration / 3_600_000)
+  const minutes = Math.floor((safeDuration % 3_600_000) / 60_000)
+  const seconds = (safeDuration % 60_000) / 1000
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${seconds.toFixed(1).padStart(4, '0')}s`
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toFixed(1).padStart(4, '0')}s`
+  }
+
+  return `${seconds.toFixed(1)}s`
+}
+
 export function MessageItem({
   message,
   onResendUser,
@@ -547,6 +589,8 @@ export function MessageItem({
   onToggleTodo,
   onTogglePlanTask,
   onOpenAttachment,
+  onOpenArtifact,
+  onDownloadArtifact,
   activeAttachmentKey = null,
 }: MessageItemProps) {
   const isUser = message.role === 'user'
@@ -561,12 +605,44 @@ export function MessageItem({
   const isPlanPanel = isEvent && (message.eventType === 'plan' || message.eventType === 'todo')
   const eventLabel = getEventLabel(message.eventType)
   const [copied, setCopied] = useState(false)
+  const [thoughtCopied, setThoughtCopied] = useState(false)
   const [isActionBarHovered, setIsActionBarHovered] = useState(false)
   const [isActionBarFocused, setIsActionBarFocused] = useState(false)
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now())
   const isActionBarVisible = isActionBarHovered || isActionBarFocused
   const attachments = message.attachments ?? []
+  const artifacts = message.artifacts ?? []
+  const artifactTraceItems = message.artifactTraceItems ?? []
+  const thoughtTiming = message.thoughtTiming
+  const hasArtifactContent = artifacts.length > 0
+  const thinkingContent = message.thinkingContent ?? ''
+  const isPlainThoughtContent = isPlainThoughtText(thinkingContent)
 
-  if (isAssistant && !hasPrimaryContent && !showThoughtsCard) {
+  useEffect(() => {
+    if (thoughtTiming?.status !== 'running') return
+
+    setCurrentTimeMs(Date.now())
+    const timerId = window.setInterval(() => {
+      setCurrentTimeMs(Date.now())
+    }, THOUGHT_TIMER_INTERVAL_MS)
+
+    return () => window.clearInterval(timerId)
+  }, [thoughtTiming?.startedAt, thoughtTiming?.status])
+
+  const thoughtDurationMs = thoughtTiming
+    ? thoughtTiming.status === 'running'
+      ? Math.max(0, currentTimeMs - thoughtTiming.startedAt)
+      : thoughtTiming.durationMs ?? (
+        typeof thoughtTiming.finishedAt === 'number'
+          ? Math.max(0, thoughtTiming.finishedAt - thoughtTiming.startedAt)
+          : undefined
+      )
+    : undefined
+  const thoughtDurationLabel = typeof thoughtDurationMs === 'number'
+    ? formatThoughtDuration(thoughtDurationMs)
+    : null
+
+  if (isAssistant && !hasPrimaryContent && !showThoughtsCard && !hasArtifactContent) {
     return null
   }
 
@@ -687,6 +763,18 @@ export function MessageItem({
     }
   }
 
+  const handleCopyThoughts = async () => {
+    if (!thinkingContent.trim()) return
+
+    try {
+      await navigator.clipboard.writeText(thinkingContent)
+      setThoughtCopied(true)
+      window.setTimeout(() => setThoughtCopied(false), 1200)
+    } catch {
+      setThoughtCopied(false)
+    }
+  }
+
   const handleActionAreaBlur = (event: FocusEvent<HTMLDivElement>) => {
     const nextFocusTarget = event.relatedTarget
     if (nextFocusTarget instanceof Node && event.currentTarget.contains(nextFocusTarget)) {
@@ -724,27 +812,33 @@ export function MessageItem({
                 </div>
               </button>
             ) : (
-              <button
+              <AttachmentFileCard
                 key={`${attachment.name}_${index}`}
-                type="button"
-                onClick={() => onOpenAttachment?.(message.id, index, attachment)}
-                title={attachment.name}
-                className={clsx(
-                  'group flex w-full max-w-[22rem] items-center gap-3 rounded-[1.25rem] border bg-surface-thought px-3.5 py-3 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all',
-                  'hover:-translate-y-0.5 hover:border-[color:var(--border-strong)] hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]',
-                  activeAttachmentKey === `${message.id}:${index}` ? 'border-[color:var(--border-strong)] shadow-[0_14px_34px_rgba(15,23,42,0.08)]' : 'border-border',
-                )}
-              >
-                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl bg-surface text-text-secondary transition-colors group-hover:text-text-primary">
-                  <FileText className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
-                  <div className="mt-0.5 truncate text-xs text-text-secondary">{formatAttachmentMeta(attachment)}</div>
-                </div>
-              </button>
+                attachment={attachment}
+                active={activeAttachmentKey === `${message.id}:${index}`}
+                onOpen={() => onOpenAttachment?.(message.id, index, attachment)}
+              />
             )
           ))}
+      </div>
+    )
+  }
+
+  const renderArtifacts = () => {
+    if (artifacts.length === 0) return null
+
+    return (
+      <div className="mt-3 flex flex-col gap-3">
+        {artifactTraceItems.length > 0 && <ArtifactTrace items={artifactTraceItems} />}
+        {artifacts.map((artifact, index) => (
+          <ArtifactCard
+            key={artifact.artifactId}
+            artifact={artifact}
+            active={activeAttachmentKey === `${message.id}:artifact:${index}`}
+            onOpen={() => onOpenArtifact?.(message.id, index, artifact)}
+            onDownload={() => onDownloadArtifact?.(artifact)}
+          />
+        ))}
       </div>
     )
   }
@@ -768,12 +862,12 @@ export function MessageItem({
       >
         {attachments.length > 0 && renderAttachments()}
 
-        {(showThoughtsCard || hasPrimaryContent || isEvent) && (
+        {(showThoughtsCard || hasPrimaryContent || isEvent || hasArtifactContent) && (
           <div
             className={clsx(
               'rounded-2xl px-4 py-2 text-sm leading-relaxed',
-              isUser && hasPrimaryContent && 'w-fit bg-hover text-text-primary border border-border/70',
-              isAssistant && (showThoughtsCard ? 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1' : 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1'),
+              isUser && hasPrimaryContent && 'w-fit bg-user-bubble text-text-primary border border-border/70',
+              isAssistant && (showThoughtsCard || hasArtifactContent ? 'w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1' : 'w-fit max-w-full bg-transparent border-transparent shadow-none text-text-primary px-1 py-1'),
               isEvent && 'bg-surface text-text-secondary border border-border/80',
               message.role === 'system' && 'bg-hover text-text-secondary border border-border',
             )}
@@ -786,28 +880,58 @@ export function MessageItem({
 
             {showThoughtsCard && (
               <div className="mb-4 overflow-hidden rounded-[1.35rem] border border-border bg-surface-thought">
-                <button
-                  type="button"
-                  onClick={() => onToggleThinking?.(message.id)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-hover/60"
-                  aria-expanded={message.isThinkingExpanded}
-                  aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
-                >
-                  <div className="flex items-center gap-2">
+                <div className="flex w-full items-center justify-between gap-3 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onToggleThinking?.(message.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:text-text-primary"
+                    aria-expanded={message.isThinkingExpanded}
+                    aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
+                  >
                     <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-thought text-accent-text">
                       <Sparkles className="size-3.5" />
                     </span>
                     <span className="text-sm font-semibold text-text-primary">Thoughts</span>
+                    {thoughtDurationLabel && (
+                      <span className="inline-flex items-center rounded-full border border-border/80 bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-secondary">
+                        {thoughtDurationLabel}
+                      </span>
+                    )}
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1 text-sm text-text-secondary">
+                    <button
+                      type="button"
+                      onClick={handleCopyThoughts}
+                      className="inline-flex size-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-hover/60"
+                      aria-label="复制思考内容"
+                      title="复制思考内容"
+                    >
+                      {thoughtCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleThinking?.(message.id)}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-text-secondary transition-colors hover:bg-hover/60"
+                      aria-expanded={message.isThinkingExpanded}
+                      aria-label={message.isThinkingExpanded ? '隐藏思考内容' : '展开查看模型思考'}
+                    >
+                      <span>{message.isThinkingExpanded ? '收起思考' : '展开思考'}</span>
+                      {message.isThinkingExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                    </button>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-text-secondary">
-                    <span>{message.isThinkingExpanded ? '收起思考' : '展开思考'}</span>
-                    {message.isThinkingExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                  </div>
-                </button>
+                </div>
 
                 {message.isThinkingExpanded && (
-                  <div className="border-t border-border px-4 py-4 text-text-primary [&_p]:text-text-primary [&_li]:text-text-primary [&_blockquote]:text-text-primary [&_td]:text-text-primary [&_code]:text-text-primary">
-                    {renderMarkdown(message.thinkingContent ?? '')}
+                  <div className="border-t border-border px-4 py-4 text-text-primary select-text">
+                    {isPlainThoughtContent ? (
+                      <div className="leading-relaxed text-text-primary">
+                        <span className="whitespace-pre-wrap break-words select-text">{thinkingContent}</span>
+                      </div>
+                    ) : (
+                      <div className="[&_p]:text-text-primary [&_li]:text-text-primary [&_blockquote]:text-text-primary [&_td]:text-text-primary [&_code]:text-text-primary">
+                        {renderMarkdown(thinkingContent)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -822,6 +946,8 @@ export function MessageItem({
                 <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
               ) : null
             )}
+
+            {isAssistant && renderArtifacts()}
           </div>
         )}
         {(isUser || isAssistant) && canCopyMessage && (

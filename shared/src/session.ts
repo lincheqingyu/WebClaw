@@ -168,6 +168,33 @@ export interface ChatFileAttachment {
 
 export type ChatAttachment = ChatImageAttachment | ChatFileAttachment
 
+export interface GeneratedFileArtifact {
+  readonly artifactId: string
+  readonly filePath: string
+  readonly name: string
+  readonly mimeType: string
+  readonly size: number
+  readonly createdAt: number
+  readonly updatedAt: number
+}
+
+export interface ArtifactDetail extends GeneratedFileArtifact {
+  readonly content: string
+}
+
+export type ArtifactTraceKind = 'viewed_file' | 'created_file' | 'updated_file' | 'ran_command'
+
+export interface ArtifactTraceItem {
+  readonly traceId: string
+  readonly stepId: StepId
+  readonly toolName: string
+  readonly kind: ArtifactTraceKind
+  readonly title: string
+  readonly subtitle: string
+  readonly detail?: string
+  readonly timestamp: number
+}
+
 export interface ThinkingConfig {
   readonly enabled: boolean
   readonly level: ThinkingLevel
@@ -519,6 +546,7 @@ export interface StepStartedEntry extends SessionEntryBase {
   readonly runId: RunId
   readonly stepId: StepId
   readonly kind: StepKind
+  readonly startedAt?: number
   readonly title?: string
   readonly todoIndex?: number
 }
@@ -529,6 +557,9 @@ export interface StepFinishedEntry extends SessionEntryBase {
   readonly stepId: StepId
   readonly kind: StepKind
   readonly status: 'completed' | 'failed'
+  readonly startedAt?: number
+  readonly finishedAt?: number
+  readonly durationMs?: number
   readonly summary?: string
   readonly todoIndex?: number
 }

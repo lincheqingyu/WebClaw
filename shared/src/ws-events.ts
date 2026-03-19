@@ -4,7 +4,9 @@
  */
 
 import type {
+  ArtifactTraceItem,
   ChatAttachment,
+  GeneratedFileArtifact,
   PausePacket,
   SerializedTodoItem,
   SessionChannel,
@@ -79,6 +81,9 @@ export interface ServerEventPayloadMap {
     stepId: StepId
     kind: StepKind
     status: 'started' | 'completed' | 'failed'
+    startedAt?: number
+    finishedAt?: number
+    durationMs?: number
     title?: string
     todoIndex?: number
     summary?: string
@@ -111,6 +116,8 @@ export interface ServerEventPayloadMap {
     summary?: string
     detail?: string
     isError?: boolean
+    generatedArtifacts?: GeneratedFileArtifact[]
+    artifactTraceItems?: ArtifactTraceItem[]
   }
   session_tool_result: {
     tool: string
