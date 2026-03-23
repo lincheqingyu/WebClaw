@@ -12,6 +12,7 @@
 ## Frontend
 
 - [`frontend/tailwind-classname-guide.md`](./frontend/tailwind-classname-guide.md)：Tailwind 4 + React className 编写约定
+- [`frontend/network-and-public-assets.md`](./frontend/network-and-public-assets.md)：前后端端口约定与 `frontend/public` 静态资源清单
 
 ## Backend
 

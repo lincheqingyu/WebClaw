@@ -46,6 +46,7 @@ pnpm-debug.log*
 
 # Claude Code 自动生成（不提交）
 .claude/settings.local.json
+.claude/worktrees/
 
 # 本地临时文件
 *.local

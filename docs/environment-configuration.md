@@ -49,7 +49,8 @@ WebClaw/.env.example
 
 ```bash
 HOST=0.0.0.0
-PORT=3011
+BACKEND_PORT=3011
+FRONTEND_PORT=5173
 LLM_API_KEY=your-api-key
 LLM_MODEL=glm-4-plus
 ```
@@ -73,7 +74,8 @@ BACKEND_ORIGIN=http://your-backend-host:3011
 | 参数 | 默认值 / 是否必填 | 可选项 / 格式 | 修改后果 | 建议 |
 |------|-------------------|---------------|----------|------|
 | `HOST` | 默认 `0.0.0.0` | 任意非空字符串，常见值：`0.0.0.0`、`127.0.0.1`、局域网 IP | 同时影响后端监听地址和前端 Vite dev server 监听地址。改成 `127.0.0.1` 后，本机外设备无法访问；改成错误 IP 可能直接导致服务无法监听。 | 本地联调用 `0.0.0.0`，只想本机访问时用 `127.0.0.1`。 |
-| `PORT` | 默认 `3000` | `1-65535` 的整数 | 后端实际监听端口会变化，前端默认推导的 API/WS 地址也会跟着变。若被占用，服务启动失败。 | 本地建议显式写入，避免多人协作时口径不一致。 |
+| `BACKEND_PORT` | 默认 `3000` | `1-65535` 的整数 | 后端实际监听端口会变化，前端默认推导的 API/WS 地址也会跟着变。若被占用，服务启动失败。 | 本地建议显式写入，避免多人协作时口径不一致。 |
+| `FRONTEND_PORT` | 默认 `5173` | `1-65535` 的整数 | 影响前端 Vite dev / preview 的展示端口。若被占用，前端开发服务启动失败；改动后需要用新端口重新访问页面。 | 本地建议显式写入，和后端端口分开维护。 |
 | `BACKEND_ORIGIN` | 可选，无默认值 | 绝对 `http://` 或 `https://` 地址，例如 `http://192.168.1.10:3011` | 前端会优先用它作为 API 基地址，并自动推导 WS 地址。填错会导致前端请求到错误的后端；若误填成 `ws://`，HTTP API 会失效。 | 只有当前后端不共用同一个页面来源时才需要配置。 |
 | `VITE_DEV_HOST` | 兼容旧配置，不推荐新写 | 与 `HOST` 类似 | 仅作为旧变量兜底，效果被 `HOST` 覆盖。继续使用会增加维护成本。 | 新配置统一改用 `HOST`。 |
 | `VITE_API_BASE` | 兼容旧配置，不推荐新写 | 绝对 HTTP(S) 地址 | 仅作为旧变量兜底。若同时配置了 `BACKEND_ORIGIN`，优先使用 `BACKEND_ORIGIN`。 | 新配置统一改用 `BACKEND_ORIGIN`。 |
@@ -82,7 +84,7 @@ BACKEND_ORIGIN=http://your-backend-host:3011
 ### 网络参数特别说明
 
 - `BACKEND_ORIGIN` 是“单一覆盖入口”，目的就是避免再分别维护 HTTP 和 WS 两个地址
-- 未配置 `BACKEND_ORIGIN` 时，前端会按“当前页面域名 + `PORT`”自动推导目标后端
+- 未配置 `BACKEND_ORIGIN` 时，前端会按“当前页面域名 + `BACKEND_PORT`”自动推导目标后端
 - 这套自动推导很适合同源部署和局域网调试，但不适合前后端分开部署的场景
 
 ### 5.2 运行时与 LLM 参数
@@ -146,7 +148,8 @@ BACKEND_ORIGIN=http://your-backend-host:3011
 
 ```bash
 HOST=0.0.0.0
-PORT=3011
+BACKEND_PORT=3011
+FRONTEND_PORT=5173
 LLM_API_KEY=your-api-key
 LLM_MODEL=glm-4-plus
 ```
@@ -161,7 +164,8 @@ LLM_MODEL=glm-4-plus
 
 ```bash
 HOST=0.0.0.0
-PORT=3011
+BACKEND_PORT=3011
+FRONTEND_PORT=5173
 LLM_API_KEY=your-api-key
 LLM_MODEL=glm-4-plus
 ```
@@ -175,7 +179,8 @@ LLM_MODEL=glm-4-plus
 
 ```bash
 HOST=0.0.0.0
-PORT=3011
+BACKEND_PORT=3011
+FRONTEND_PORT=5173
 BACKEND_ORIGIN=https://api.example.com
 LLM_API_KEY=your-api-key
 LLM_MODEL=glm-4-plus

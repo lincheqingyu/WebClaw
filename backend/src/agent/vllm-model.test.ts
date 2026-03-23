@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { loadConfig } from '../config/index.js'
 import { createVllmModel } from './vllm-model.js'
 
-process.env.PORT ??= '3011'
+process.env.BACKEND_PORT ??= '3011'
 process.env.NODE_ENV ??= 'test'
 process.env.LLM_API_KEY ??= 'test-key'
 process.env.LLM_BASE_URL ??= 'https://example.com/v1'

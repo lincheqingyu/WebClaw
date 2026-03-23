@@ -97,7 +97,8 @@ pnpm dev              # 前后端并行启动
 在项目根目录维护 `.env`，后端启动时会从根目录加载配置：
 
 ```bash
-PORT=3000
+BACKEND_PORT=3000
+FRONTEND_PORT=5173
 LLM_API_KEY=sk-xxx
 LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
 LLM_MODEL=glm-4-plus

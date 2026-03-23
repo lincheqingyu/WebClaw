@@ -37,8 +37,8 @@ async function main(): Promise<void> {
 
   // 5. 启动服务器
   const displayHost = config.HOST === '0.0.0.0' ? 'localhost' : config.HOST
-  server.listen(config.PORT, config.HOST, () => {
-    logger.info(`服务器已启动: http://${displayHost}:${config.PORT}`)
+  server.listen(config.BACKEND_PORT, config.HOST, () => {
+    logger.info(`服务器已启动: http://${displayHost}:${config.BACKEND_PORT}`)
     logger.info(`环境: ${config.NODE_ENV}`)
     logger.info(`日志: ${config.LOG_LEVEL}`)
   })

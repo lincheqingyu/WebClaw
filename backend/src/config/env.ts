@@ -5,10 +5,14 @@
 
 import { z } from 'zod'
 
+const portSchema = z.coerce.number().int().min(1).max(65535)
+
 /** 环境变量 Schema */
 const envSchema = z.object({
-  /** 服务端口 */
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /** 后端服务端口 */
+  BACKEND_PORT: portSchema.optional(),
+  /** 兼容旧配置 */
+  PORT: portSchema.optional(),
 
   /** 服务监听地址 */
   HOST: z.string().min(1).default('0.0.0.0'),
@@ -68,7 +72,10 @@ const envSchema = z.object({
 
   /** 档案 API 认证 Token（可选） */
   ARCHIVE_API_TOKEN: z.string().optional(),
-})
+}).transform(({ BACKEND_PORT, PORT, ...rest }) => ({
+  ...rest,
+  BACKEND_PORT: BACKEND_PORT ?? PORT ?? 3000,
+}))
 
 /** 校验后的环境变量类型 */
 export type Env = z.infer<typeof envSchema>

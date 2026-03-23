@@ -10,7 +10,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig(({ mode }) => {
     // 从根目录加载 .env
     const env = loadEnv(mode, '..', '')
-    const port = env.PORT || '3000'
+    const backendPort = env.BACKEND_PORT || env.PORT || '3000'
+    const frontendPort = Number(env.FRONTEND_PORT || '5173')
     const host = env.HOST || env.VITE_DEV_HOST || '0.0.0.0'
     const backendOrigin = env.BACKEND_ORIGIN || env.VITE_API_BASE || 'auto'
     const legacyWsBase = env.VITE_WS_BASE || 'auto'
@@ -22,12 +23,17 @@ export default defineConfig(({ mode }) => {
         ],
         server: {
             host,
+            port: frontendPort,
+        },
+        preview: {
+            host,
+            port: frontendPort,
         },
         // 从 monorepo 根目录读取 .env 文件
         envDir: '..',
         define: {
-            // 统一使用 BACKEND_ORIGIN 覆盖前后端通信地址，默认按当前页面 + PORT 自动推导
-            '__BACKEND_PORT__': JSON.stringify(port),
+            // 统一使用 BACKEND_ORIGIN 覆盖前后端通信地址，默认按当前页面 + BACKEND_PORT 自动推导
+            '__BACKEND_PORT__': JSON.stringify(backendPort),
             '__BACKEND_ORIGIN__': JSON.stringify(backendOrigin),
             '__LEGACY_WS_BASE__': JSON.stringify(legacyWsBase),
         },

@@ -1,6 +1,6 @@
 /**
  * API 地址配置
- * 优先使用统一的 BACKEND_ORIGIN，否则从当前页面地址与 PORT 自动派生
+ * 优先使用统一的 BACKEND_ORIGIN，否则从当前页面地址与 BACKEND_PORT 自动派生
  */
 
 declare const __BACKEND_ORIGIN__: string

@@ -84,7 +84,7 @@ export function ConversationSidebar({
             <div className="grid h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] items-center gap-3 rounded-2xl">
               <div className="inline-flex h-9 w-9 items-center justify-center justify-self-center overflow-visible">
                 <img
-                  src="/lecquy-mark.png"
+                  src="/lecquy-mark-nobg.png"
                   alt="Lecquy"
                   className="block h-7.5 w-7.5 shrink-0 translate-y-[3px] scale-[1.24] object-contain"
                   loading="eager"
