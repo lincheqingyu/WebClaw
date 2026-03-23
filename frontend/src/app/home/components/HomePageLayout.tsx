@@ -186,7 +186,7 @@ export function HomePageLayout() {
 
     document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
 
-    const themeColor = isDark ? '#1f1f1f' : '#f6f6f7'
+    const themeColor = isDark ? '#1f1f1f' : '#f7ede2'
     let meta = document.querySelector('meta[name="theme-color"]')
     if (!meta) {
       meta = document.createElement('meta')

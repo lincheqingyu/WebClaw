@@ -4,9 +4,7 @@
 
 当前保留文件：
 
-- `favicon.ico`：浏览器根路径 favicon 兜底资源
-- `lecquy-favicon-32.png`：浏览器标签页 favicon
-- `lecquy-apple-touch-180.png`：Apple touch icon
+- `Designer-6_svg.svg`：当前桌面标签页使用的 SVG favicon
 - `lecquy-mark-nobg.png`：左侧栏品牌图（透明底）
 
 清理约定：
