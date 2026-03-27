@@ -6,7 +6,12 @@ import { buildAttachmentPreviewUrl } from '../../lib/chat-attachments'
 import type { ChatAttachment } from '@webclaw/shared'
 import { ArtifactCard } from '../artifacts/ArtifactCard'
 import { ArtifactTrace } from '../artifacts/ArtifactTrace'
-import { AttachmentFileCard } from '../files/AttachmentFileCard'
+import {
+  AttachmentFileCard,
+  CHAT_ATTACHMENT_CARD_BODY_CLASS,
+  CHAT_ATTACHMENT_CARD_PREVIEW_CLASS,
+  CHAT_ATTACHMENT_CARD_SIZE_CLASS,
+} from '../files/AttachmentFileCard'
 import type { ChatArtifact } from '../../lib/artifacts'
 
 interface MessageItemProps {
@@ -806,38 +811,44 @@ export function MessageItem({
 
     return (
       <div className={clsx('mb-2.5 flex flex-col gap-2', isUser ? 'items-end' : 'items-start')}>
-          {attachments.map((attachment, index) => (
-            attachment.kind === 'image' ? (
-              <button
-                key={`${attachment.name}_${index}`}
-                type="button"
-                onClick={() => onOpenAttachment?.(message.id, index, attachment)}
-                title={attachment.name}
-                className={clsx(
-                  'group overflow-hidden rounded-[1.25rem] border bg-surface-thought text-left shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-all',
-                  'w-full max-w-[18rem] hover:-translate-y-0.5 hover:border-[color:var(--border-strong)] hover:shadow-[0_14px_34px_rgba(15,23,42,0.10)]',
-                  activeAttachmentKey === `${message.id}:${index}` ? 'border-[color:var(--border-strong)] shadow-[0_14px_34px_rgba(15,23,42,0.10)]' : 'border-border',
-                )}
-              >
+        {attachments.map((attachment, index) => (
+          attachment.kind === 'image' ? (
+            <button
+              key={`${attachment.name}_${index}`}
+              type="button"
+              onClick={() => onOpenAttachment?.(message.id, index, attachment)}
+              title={attachment.name}
+              className={clsx(
+                'group flex flex-col overflow-hidden rounded-[1.25rem] border bg-surface-thought text-left shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-all',
+                'dark:border-[#5a5a55] dark:bg-[rgb(38,38,36)] dark:shadow-[0_12px_28px_rgba(0,0,0,0.24)]',
+                CHAT_ATTACHMENT_CARD_SIZE_CLASS,
+                'hover:-translate-y-0.5 hover:border-[color:var(--border-strong)] hover:shadow-[0_14px_34px_rgba(15,23,42,0.10)] dark:hover:shadow-[0_16px_34px_rgba(0,0,0,0.34)]',
+                activeAttachmentKey === `${message.id}:${index}`
+                  ? 'border-[color:var(--border-strong)] shadow-[0_14px_34px_rgba(15,23,42,0.10)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.34)]'
+                  : 'border-border',
+              )}
+            >
+              <div className={CHAT_ATTACHMENT_CARD_PREVIEW_CLASS}>
                 <img
                   src={buildAttachmentPreviewUrl(attachment) ?? ''}
                   alt={attachment.name}
-                  className="h-32 w-32 object-cover md:h-40 md:w-40"
+                  className="block h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]"
                 />
-                <div className="border-t border-border/70 px-3 py-2">
-                  <div className="truncate text-xs font-medium text-text-primary">{attachment.name}</div>
-                  <div className="mt-0.5 text-[11px] text-text-secondary">{formatAttachmentMeta(attachment)}</div>
-                </div>
-              </button>
-            ) : (
-              <AttachmentFileCard
-                key={`${attachment.name}_${index}`}
-                attachment={attachment}
-                active={activeAttachmentKey === `${message.id}:${index}`}
-                onOpen={() => onOpenAttachment?.(message.id, index, attachment)}
-              />
-            )
-          ))}
+              </div>
+              <div className={CHAT_ATTACHMENT_CARD_BODY_CLASS}>
+                <div className="truncate text-sm font-medium text-text-primary">{attachment.name}</div>
+                <div className="mt-0.5 text-xs text-text-secondary">{formatAttachmentMeta(attachment)}</div>
+              </div>
+            </button>
+          ) : (
+            <AttachmentFileCard
+              key={`${attachment.name}_${index}`}
+              attachment={attachment}
+              active={activeAttachmentKey === `${message.id}:${index}`}
+              onOpen={() => onOpenAttachment?.(message.id, index, attachment)}
+            />
+          )
+        ))}
       </div>
     )
   }

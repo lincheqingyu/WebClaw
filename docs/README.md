@@ -5,9 +5,10 @@
 ## 阅读顺序
 
 1. [`monorepo-guide.md`](./monorepo-guide.md)：了解 workspace 结构和常用命令
-2. [`environment-configuration.md`](./environment-configuration.md)：环境变量、默认值、覆盖关系与配置风险说明
-3. [`backend/session-management-integration.md`](./backend/session-management-integration.md)：前后端会话联调约定
-4. 按角色继续阅读对应分组文档
+2. [`personal-strong-agent-roadmap.md`](./personal-strong-agent-roadmap.md)：记录 WebClaw 从 AI Web 向“个人强 Agent”演进的最终方向与阶段重点
+3. [`environment-configuration.md`](./environment-configuration.md)：环境变量、默认值、覆盖关系与配置风险说明
+4. [`backend/session-management-integration.md`](./backend/session-management-integration.md)：前后端会话联调约定
+5. 按角色继续阅读对应分组文档
 
 ## Frontend
 
