@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { ArrowLeft, Image as ImageIcon, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import { buildAttachmentPreviewUrl } from '../../../lib/chat-attachments'
 import { renderMarkdown } from '../../../components/chat/MessageItem'
 

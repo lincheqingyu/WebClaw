@@ -1,4 +1,4 @@
-# WebClaw 部署指南
+# Lecquy 部署指南
 
 ## 环境要求
 
@@ -12,7 +12,7 @@
 部署后文件分布：
 
 ```
-~/.webclaw/workspace/          # 项目根目录
+~/.lecquy/workspace/          # 项目根目录
 ├── frontend/dist/             # 前端静态文件
 ├── backend/dist/              # 后端编译产物
 ├── backend/.env               # 后端环境变量
@@ -20,7 +20,7 @@
 └── shared/                    # 共享类型包
 
 ~/.config/systemd/user/
-└── webclaw-backend.service    # systemd 用户服务
+└── lecquy-backend.service    # systemd 用户服务
 ```
 
 ## 快速部署
@@ -29,10 +29,10 @@
 
 ```bash
 # 方式一：scp
-scp -r . user@server:~/webclaw-src/
+scp -r . user@server:~/lecquy-src/
 
 # 方式二：git clone
-git clone <your-repo-url> ~/webclaw-src
+git clone <your-repo-url> ~/lecquy-src
 ```
 
 ### 2. 安装 Node.js 和 pnpm
@@ -53,12 +53,12 @@ pnpm -v
 ### 3. 首次部署
 
 ```bash
-cd ~/webclaw-src
+cd ~/lecquy-src
 bash deploy/deploy.sh
 ```
 
 脚本会自动：
-1. 复制代码到 `~/.webclaw/workspace/`
+1. 复制代码到 `~/.lecquy/workspace/`
 2. 安装依赖并构建前端 + 后端
 3. 注册 systemd 用户服务
 4. 启动后端
@@ -66,7 +66,7 @@ bash deploy/deploy.sh
 首次运行会提示编辑 `.env`，按提示操作：
 
 ```bash
-vim ~/.webclaw/workspace/backend/.env
+vim ~/.lecquy/workspace/backend/.env
 ```
 
 填入必要配置后重新运行：
@@ -79,15 +79,15 @@ bash deploy/deploy.sh
 
 ```bash
 sudo apt install -y nginx
-sudo cp deploy/webclaw.nginx.conf /etc/nginx/sites-available/webclaw
-sudo ln -sf /etc/nginx/sites-available/webclaw /etc/nginx/sites-enabled/webclaw
+sudo cp deploy/lecquy.nginx.conf /etc/nginx/sites-available/lecquy
+sudo ln -sf /etc/nginx/sites-available/lecquy /etc/nginx/sites-enabled/lecquy
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
 
 编辑 `server_name` 为你的域名或 IP：
 
 ```bash
-sudo vim /etc/nginx/sites-available/webclaw
+sudo vim /etc/nginx/sites-available/lecquy
 ```
 
 启用：
@@ -127,19 +127,19 @@ DM_CONNECT_STRING=dm://user:pass@host:port?schema=xxx
 
 ```bash
 # 查看状态（类似 openclaw-gateway）
-systemctl --user status webclaw-backend
+systemctl --user status lecquy-backend
 
 # 重启
-systemctl --user restart webclaw-backend
+systemctl --user restart lecquy-backend
 
 # 停止
-systemctl --user stop webclaw-backend
+systemctl --user stop lecquy-backend
 
 # 查看实时日志
-journalctl --user -u webclaw-backend -f
+journalctl --user -u lecquy-backend -f
 
 # 查看最近 100 行日志
-journalctl --user -u webclaw-backend -n 100 --no-pager
+journalctl --user -u lecquy-backend -n 100 --no-pager
 ```
 
 ### 更新部署
@@ -148,12 +148,12 @@ journalctl --user -u webclaw-backend -n 100 --no-pager
 
 ```bash
 # 方式一：从源码目录更新
-cd ~/webclaw-src
+cd ~/lecquy-src
 git pull
 bash deploy/deploy.sh update
 
 # 方式二：直接在 workspace 里更新
-cd ~/.webclaw/workspace
+cd ~/.lecquy/workspace
 git pull
 bash deploy/deploy.sh update
 ```
@@ -164,8 +164,8 @@ bash deploy/deploy.sh update
 
 ```bash
 bash deploy/deploy.sh uninstall
-# 服务已移除，代码保留在 ~/.webclaw/workspace/
-# 如需完全清除：rm -rf ~/.webclaw
+# 服务已移除，代码保留在 ~/.lecquy/workspace/
+# 如需完全清除：rm -rf ~/.lecquy
 ```
 
 ## 架构
@@ -175,12 +175,12 @@ bash deploy/deploy.sh uninstall
     │
     ▼
 nginx (:80)
-    ├── /            → 前端静态文件 (~/.webclaw/workspace/frontend/dist/)
+    ├── /            → 前端静态文件 (~/.lecquy/workspace/frontend/dist/)
     ├── /api/*       → 反代后端 (127.0.0.1:5000)
     └── /ws          → WebSocket 反代 (127.0.0.1:5000)
                             │
                             ▼
-                    webclaw-backend (systemd --user)
+                    lecquy-backend (systemd --user)
                         │
                         ├── Agent Runner → LLM API
                         ├── 工具系统 (bash, read_file, skill...)
@@ -193,19 +193,19 @@ nginx (:80)
 
 ```bash
 # 查看详细错误
-journalctl --user -u webclaw-backend -n 50 --no-pager
+journalctl --user -u lecquy-backend -n 50 --no-pager
 
 # 常见原因
-# 1. .env 未配置 → vim ~/.webclaw/workspace/backend/.env
+# 1. .env 未配置 → vim ~/.lecquy/workspace/backend/.env
 # 2. 端口占用 → lsof -i :5000
-# 3. 构建产物缺失 → cd ~/.webclaw/workspace && pnpm build
+# 3. 构建产物缺失 → cd ~/.lecquy/workspace && pnpm build
 ```
 
 ### 前端访问 404
 
 ```bash
 # 确认构建产物存在
-ls ~/.webclaw/workspace/frontend/dist/index.html
+ls ~/.lecquy/workspace/frontend/dist/index.html
 
 # 确认 nginx 配置正确
 sudo nginx -t

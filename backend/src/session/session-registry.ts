@@ -6,7 +6,7 @@
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { SessionId, SessionSnapshot } from '@webclaw/shared'
+import type { SessionId, SessionSnapshot } from '@lecquy/shared'
 import { createSessionState, restoreSessionState, serializeSessionState } from './session-state.js'
 import type { SessionState } from './session-state.js'
 import { logger } from '../utils/logger.js'

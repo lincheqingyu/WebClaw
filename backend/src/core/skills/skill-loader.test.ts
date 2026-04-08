@@ -7,16 +7,16 @@ import { resetRuntimeBundleCache } from '../runtime-bundle.js'
 import { SKILLS } from './skill-loader.js'
 
 async function createWorkspace(): Promise<string> {
-  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'zxhclaw-skills-'))
+  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'lecquy-skills-'))
   await mkdir(path.join(workspaceDir, 'backend', 'skills'), { recursive: true })
-  await mkdir(path.join(workspaceDir, '.ZxhClaw', 'skills'), { recursive: true })
+  await mkdir(path.join(workspaceDir, '.lecquy', 'skills'), { recursive: true })
   return workspaceDir
 }
 
 test('skill loader merges bundled, workspace and runtime skills with runtime override priority', async () => {
   const workspaceDir = await createWorkspace()
   const bundlePath = path.join(workspaceDir, 'runtime-bundle.json')
-  const previousBundlePath = process.env.WEBCLAW_RUNTIME_BUNDLE
+  const previousBundlePath = process.env.LECQUY_RUNTIME_BUNDLE
 
   try {
     await mkdir(path.join(workspaceDir, 'backend', 'skills', 'shared-skill'), { recursive: true })
@@ -33,9 +33,9 @@ test('skill loader merges bundled, workspace and runtime skills with runtime ove
       'utf8',
     )
 
-    await mkdir(path.join(workspaceDir, '.ZxhClaw', 'skills', 'shared-skill'), { recursive: true })
+    await mkdir(path.join(workspaceDir, '.lecquy', 'skills', 'shared-skill'), { recursive: true })
     await writeFile(
-      path.join(workspaceDir, '.ZxhClaw', 'skills', 'shared-skill', 'SKILL.md'),
+      path.join(workspaceDir, '.lecquy', 'skills', 'shared-skill', 'SKILL.md'),
       [
         '---',
         'name: shared-skill',
@@ -79,7 +79,7 @@ test('skill loader merges bundled, workspace and runtime skills with runtime ove
       'utf8',
     )
 
-    process.env.WEBCLAW_RUNTIME_BUNDLE = bundlePath
+    process.env.LECQUY_RUNTIME_BUNDLE = bundlePath
     resetRuntimeBundleCache()
 
     const skills = SKILLS.listSkillSummaries(workspaceDir)
@@ -88,7 +88,7 @@ test('skill loader merges bundled, workspace and runtime skills with runtime ove
 
     assert.ok(runtimeSkill)
     assert.equal(runtimeSkill.description, 'runtime version')
-    assert.match(runtimeSkill.displayPath, /\.ZxhClaw\/skills\/shared-skill\/SKILL\.md/)
+    assert.match(runtimeSkill.displayPath, /\.lecquy\/skills\/shared-skill\/SKILL\.md/)
 
     assert.ok(bundledSkill)
     assert.equal(bundledSkill.displayPath, 'builtin://skills/bundled-only/SKILL.md')
@@ -100,9 +100,9 @@ test('skill loader merges bundled, workspace and runtime skills with runtime ove
     assert.match(bundledContent ?? '', /bundled only body/)
   } finally {
     if (previousBundlePath === undefined) {
-      delete process.env.WEBCLAW_RUNTIME_BUNDLE
+      delete process.env.LECQUY_RUNTIME_BUNDLE
     } else {
-      process.env.WEBCLAW_RUNTIME_BUNDLE = previousBundlePath
+      process.env.LECQUY_RUNTIME_BUNDLE = previousBundlePath
     }
     resetRuntimeBundleCache()
     await rm(workspaceDir, { recursive: true, force: true })

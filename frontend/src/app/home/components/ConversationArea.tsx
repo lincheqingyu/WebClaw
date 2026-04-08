@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Moon, Settings, Square, Sun } from 'lucide-react'
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import { ChatInput, type ChatInputSubmitPayload } from '../../../components/ui/ChatInput'
 import { MessageList } from '../../../components/chat/MessageList'
 import {

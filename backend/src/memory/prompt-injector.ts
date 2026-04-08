@@ -1,4 +1,4 @@
-import type { SessionMode, SessionRouteContext } from '@webclaw/shared'
+import type { SessionMode, SessionRouteContext } from '@lecquy/shared'
 import { getPool } from '../db/client.js'
 import { searchEventMemories } from '../db/memory-search-repository.js'
 import { formatMemoryRecallBlock } from '../runtime/context/templates/memory-recall.template.js'

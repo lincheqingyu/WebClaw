@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import type { ChatMessage } from '../../hooks/useChat'
 import { MessageItem } from './MessageItem'
 import type { ChatArtifact } from '../../lib/artifacts'

@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
-import type { SessionMode, SessionRouteContext, ThinkingLevel } from '@webclaw/shared'
+import type { SessionMode, SessionRouteContext, ThinkingLevel } from '@lecquy/shared'
 import { readPromptContextFiles, resolvePromptContextPaths, type PromptContextRole } from './context-files.js'
 import { renderPromptModuleTemplate } from './prompt-module-files.js'
 import { SKILLS } from '../skills/skill-loader.js'

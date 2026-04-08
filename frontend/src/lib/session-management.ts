@@ -6,7 +6,7 @@ import {
   type SessionEventEntry,
   type SessionMessageRecord,
   type SessionProjection,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import type { ChatMessage } from '../hooks/useChat'
 import {
   isArtifactTraceItem,

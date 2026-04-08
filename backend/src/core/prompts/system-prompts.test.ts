@@ -23,7 +23,7 @@ function createMockTool(name: string, description: string): AgentTool<any> {
 }
 
 async function createWorkspace(): Promise<string> {
-  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'zxhclaw-prompts-'))
+  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'lecquy-prompts-'))
   await mkdir(path.join(workspaceDir, 'docs', 'backend'), { recursive: true })
   await writeFile(path.join(workspaceDir, 'docs', 'README.md'), '# Docs\n', 'utf8')
   await mkdir(path.join(workspaceDir, 'backend'), { recursive: true })
@@ -31,7 +31,7 @@ async function createWorkspace(): Promise<string> {
   return workspaceDir
 }
 
-test('ensurePromptContextFiles migrates legacy MEMORY.md into .ZxhClaw', async () => {
+test('ensurePromptContextFiles migrates legacy MEMORY.md into .lecquy', async () => {
   const workspaceDir = await createWorkspace()
   const legacyDir = path.join(workspaceDir, '.memory')
 
@@ -47,8 +47,8 @@ test('ensurePromptContextFiles migrates legacy MEMORY.md into .ZxhClaw', async (
     assert.equal(migrated, '# Legacy Memory\n\n已迁移内容\n')
     assert.equal(existsSync(paths.agentsFile), false)
     assert.equal(existsSync(paths.toolsFile), false)
-    assert.match(managedAgents.content, /ZxhClaw Runtime AGENTS/)
-    assert.match(managedTools.content, /ZxhClaw Runtime TOOLS/)
+    assert.match(managedAgents.content, /Lecquy Runtime AGENTS/)
+    assert.match(managedTools.content, /Lecquy Runtime TOOLS/)
   } finally {
     await rm(workspaceDir, { recursive: true, force: true })
   }
@@ -61,7 +61,7 @@ test('buildSimpleSystemPrompt injects full project context, docs, timezone and t
   try {
     await ensurePromptContextFiles(workspaceDir)
     await writeFile(paths.soulFile, '你是一个沉稳直接的助手。', 'utf8')
-    await writeFile(paths.identityFile, '- 名称：ZxhClaw\n- 气质：理性\n', 'utf8')
+    await writeFile(paths.identityFile, '- 名称：Lecquy\n- 气质：理性\n', 'utf8')
     await writeFile(paths.userFile, '- 称呼方式：HQY\n', 'utf8')
     await writeFile(paths.memoryFile, '重要记忆：优先结论先行。', 'utf8')
 
@@ -81,17 +81,17 @@ test('buildSimpleSystemPrompt injects full project context, docs, timezone and t
       workspaceDir,
     })
 
-    assert.match(prompt, /你是运行在 ZxhClaw 中的个人助手/)
+    assert.match(prompt, /你是运行在 Lecquy 中的个人助手/)
     assert.match(prompt, /## Tooling/)
     assert.match(prompt, /- read_file: 读取文件/)
     assert.match(prompt, /## Documentation/)
     assert.match(prompt, /docs\/README\.md/)
     assert.match(prompt, /## Current Date & Time/)
     assert.match(prompt, /Time zone: Asia\/Shanghai/)
-    assert.match(prompt, /## \.ZxhClaw\/SOUL\.md/)
-    assert.match(prompt, /## \.ZxhClaw\/IDENTITY\.md/)
-    assert.match(prompt, /## \.ZxhClaw\/USER\.md/)
-    assert.match(prompt, /## \.ZxhClaw\/MEMORY\.md/)
+    assert.match(prompt, /## \.lecquy\/SOUL\.md/)
+    assert.match(prompt, /## \.lecquy\/IDENTITY\.md/)
+    assert.match(prompt, /## \.lecquy\/USER\.md/)
+    assert.match(prompt, /## \.lecquy\/MEMORY\.md/)
     assert.match(prompt, /## Runtime/)
     assert.match(prompt, /role=simple \| mode=simple/)
     assert.match(prompt, /## Extra Instructions \(lowest priority\)/)
@@ -124,13 +124,13 @@ test('buildWorkerPrompt keeps only AGENTS and TOOLS project files', async () => 
       workspaceDir,
     })
 
-    assert.match(prompt, /你是运行在 ZxhClaw 中的任务执行器/)
-    assert.match(prompt, /## \.ZxhClaw\/AGENTS\.md/)
-    assert.match(prompt, /## \.ZxhClaw\/TOOLS\.md/)
-    assert.doesNotMatch(prompt, /\.ZxhClaw\/SOUL\.md/)
-    assert.doesNotMatch(prompt, /\.ZxhClaw\/IDENTITY\.md/)
-    assert.doesNotMatch(prompt, /\.ZxhClaw\/USER\.md/)
-    assert.doesNotMatch(prompt, /\.ZxhClaw\/MEMORY\.md/)
+    assert.match(prompt, /你是运行在 Lecquy 中的任务执行器/)
+    assert.match(prompt, /## \.lecquy\/AGENTS\.md/)
+    assert.match(prompt, /## \.lecquy\/TOOLS\.md/)
+    assert.doesNotMatch(prompt, /\.lecquy\/SOUL\.md/)
+    assert.doesNotMatch(prompt, /\.lecquy\/IDENTITY\.md/)
+    assert.doesNotMatch(prompt, /\.lecquy\/USER\.md/)
+    assert.doesNotMatch(prompt, /\.lecquy\/MEMORY\.md/)
     assert.doesNotMatch(prompt, /## Documentation/)
     assert.doesNotMatch(prompt, /## Current Date & Time/)
     assert.match(prompt, /role=worker \| mode=plan/)
@@ -139,14 +139,14 @@ test('buildWorkerPrompt keeps only AGENTS and TOOLS project files', async () => 
   }
 })
 
-test('buildSimpleSystemPrompt reads overridable module templates from .ZxhClaw/system-prompt', async () => {
+test('buildSimpleSystemPrompt reads overridable module templates from .lecquy/system-prompt', async () => {
   const workspaceDir = await createWorkspace()
 
   try {
     await ensurePromptContextFiles(workspaceDir)
     await ensurePromptModuleTemplates(workspaceDir)
     await writeFile(
-      path.join(workspaceDir, '.ZxhClaw', 'system-prompt', 'identity-simple.md'),
+      path.join(workspaceDir, '.lecquy', 'system-prompt', 'identity-simple.md'),
       '你是一个部署后可配置的助手模板。\n',
       'utf8',
     )

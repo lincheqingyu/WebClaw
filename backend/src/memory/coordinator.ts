@@ -1,4 +1,4 @@
-import type { SessionProjection } from '@webclaw/shared'
+import type { SessionProjection } from '@lecquy/shared'
 import { getConfig, type Env } from '../config/index.js'
 import { getPool } from '../db/client.js'
 import {

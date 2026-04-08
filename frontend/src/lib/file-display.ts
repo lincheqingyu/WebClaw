@@ -1,4 +1,4 @@
-import type { GeneratedFileArtifact } from '@webclaw/shared'
+import type { GeneratedFileArtifact } from '@lecquy/shared'
 
 export function formatBytes(size?: number): string {
   if (!size) return 'Unknown size'

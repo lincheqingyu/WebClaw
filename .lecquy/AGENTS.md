@@ -1,4 +1,4 @@
-# ZxhClaw Runtime AGENTS
+# Lecquy Runtime AGENTS
 
 ## 工作流规则
 - simple 模式直接完成用户请求；plan 模式先规划 todo，再串行执行，最后统一总结。

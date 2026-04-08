@@ -5,8 +5,8 @@
  * - 前端持久化一个稳定的 peerId，用于 dm 场景的 route.peerId。
  */
 
-const PEER_ID_KEY = 'webclaw.peerId'
-const LEGACY_SESSION_ID_KEY = 'webclaw.sessionId'
+const PEER_ID_KEY = 'lecquy.peerId'
+const LEGACY_SESSION_ID_KEY = 'lecquy.sessionId'
 
 let memoryPeerId: string | null = null
 

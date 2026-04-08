@@ -1,4 +1,4 @@
-# WebClaw — Agent Web 全栈项目
+# Lecquy — Agent Web 全栈项目
 
 ## 项目概述
 
@@ -10,7 +10,7 @@
 |------|------|
 | 前端 | React 19 · Vite 7 · TypeScript 5.9 · Tailwind CSS 4 |
 | 后端 | Express 4 · TypeScript 5.9 · ESM · pi-agent-core |
-| 共享 | @webclaw/shared（类型定义） |
+| 共享 | @lecquy/shared（类型定义） |
 | 包管理 | pnpm workspace |
 
 ## 架构全景
@@ -19,7 +19,7 @@
 浏览器 ──WebSocket──→ Express ──→ Agent Runner ──→ vLLM/OpenAI API
   │                     │              │
   │ shared 类型         │ shared 类型   │ tools/
-  └─── @webclaw/shared ─┘              ├── bash, read_file, edit_file
+  └─── @lecquy/shared ─┘              ├── bash, read_file, edit_file
                                        ├── write_file, skill, todo_write
                                        └── session-tools/
 ```
@@ -41,7 +41,7 @@
 ## 目录导航
 
 ```
-WebClaw/
+Lecquy/
 ├── frontend/          # React SPA（详见 frontend/README.md 与 docs/frontend/）
 │   └── src/
 │       ├── app/home/  # 首页：HomePageLayout, ConversationArea, SettingsDrawer
@@ -50,7 +50,7 @@ WebClaw/
 │       ├── hooks/     # useChat, useAutoResize
 │       ├── lib/       # ws-reconnect, session
 │       └── config/    # api.ts（API 地址配置）
-├── backend/           # Express 服务（详见 backend/AGENTS.md 与 backend/simple-plan-modes-analysis.md）
+├── backend/           # Express 服务（详见 backend/AGENTS.md 与 docs/backend/20260408-13-Simple Plan 模式分析 技术规范.md）
 │   └── src/
 │       ├── agent/     # Agent 核心：agent-runner, vllm-model, tools/
 │       ├── controllers/  # health, memory, models, sessions
@@ -69,6 +69,43 @@ WebClaw/
 - 统一文档入口：`docs/README.md`
 - 前端文档目录：`docs/frontend/`
 - 后端文档目录：`docs/backend/`
+
+## 文档命名规范
+
+以后新增的开发文档、规范文档、验收文档、复盘文档，统一使用下面的文件名格式：
+
+```text
+YYYYMMDD-N-文档标题 文档类型.md
+```
+
+例如：
+
+- `20260408-1-RAG 开发规划.md`
+- `20260408-2-上下文压缩 技术规范.md`
+- `20260408-3-PostgreSQL 验收记录.md`
+- `20260408-4-真实链路联调 复盘记录.md`
+
+命名规则：
+
+- `YYYYMMDD`：表示该轮文档的日期，必须放在最前面
+- `N`：表示同一天内的顺序号，必须从 `1` 开始连续递增，不能跳号
+- 同一天的 `2` 必须建立在 `1` 之后，`3` 必须建立在 `2` 之后；编号本身就是阅读顺序和依赖顺序
+- `文档标题`：统一优先使用中文；允许空格；保持简短明确
+- `文档类型`：必须使用下面的统一词表，不要自行发明近义词
+
+统一词表：
+
+- `开发规划`
+- `技术规范`
+- `验收记录`
+- `复盘记录`
+
+补充要求：
+
+- 未来新增文档默认遵守这套规则，旧文档不强制立即重命名
+- 如果同一天新增多份文档，先确认上一份文档已经定稿，再继续编号下一份
+- 除非是必须保留的专有名词，否则不要在文件名里混用英文 slug
+- 新文档写入 `docs/` 后，要同步更新 `docs/README.md`，保证能按顺序找到
 
 ## 协作分工
 

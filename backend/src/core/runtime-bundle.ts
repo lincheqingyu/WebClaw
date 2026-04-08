@@ -35,7 +35,7 @@ function readSeaAssetText(assetName: string): string | null {
 }
 
 function resolveBundleFilePath(): string | null {
-  const overridePath = process.env.WEBCLAW_RUNTIME_BUNDLE?.trim()
+  const overridePath = process.env.LECQUY_RUNTIME_BUNDLE?.trim()
   if (overridePath) {
     return path.resolve(overridePath)
   }

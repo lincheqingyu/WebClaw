@@ -40,14 +40,14 @@ async function main() {
 
   execFileSync(
     'pnpm',
-    ['--filter', '@webclaw/backend', '--prod', 'deploy', '--legacy', BACKEND_RELEASE_DIR],
+    ['--filter', '@lecquy/backend', '--prod', 'deploy', '--legacy', BACKEND_RELEASE_DIR],
     { cwd: ROOT_DIR, stdio: 'inherit' },
   )
 
   await fs.copyFile(RUNTIME_BUNDLE_FILE, path.join(BACKEND_RELEASE_DIR, 'runtime-bundle.json'))
   await fs.copyFile(path.join(ROOT_DIR, '.env.example'), path.join(RELEASE_DIR, '.env.example'))
   await fs.copyFile(path.join(ROOT_DIR, 'deploy', 'PORTABLE-RELEASE.md'), path.join(RELEASE_DIR, 'README.md'))
-  await fs.mkdir(path.join(RELEASE_DIR, '.ZxhClaw', 'skills'), { recursive: true })
+  await fs.mkdir(path.join(RELEASE_DIR, '.lecquy', 'skills'), { recursive: true })
   await stripDeploymentArtifacts(path.join(BACKEND_RELEASE_DIR, 'dist'))
   await removeIfExists(path.join(BACKEND_RELEASE_DIR, 'src'))
   await removeIfExists(path.join(BACKEND_RELEASE_DIR, 'skills'))

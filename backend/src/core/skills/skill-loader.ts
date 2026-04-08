@@ -3,7 +3,7 @@
  * 技能来源按优先级合并：
  * 1. 程序内置 bundle
  * 2. 仓库内 backend/skills（开发期覆盖）
- * 3. .ZxhClaw/skills（部署后扩展/覆盖）
+ * 3. .lecquy/skills（部署后扩展/覆盖）
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'

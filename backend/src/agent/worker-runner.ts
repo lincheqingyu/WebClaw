@@ -4,7 +4,7 @@
 
 import type { Model, Message } from '@mariozechner/pi-ai'
 import { agentLoop, type AgentEvent, type AgentMessage } from '@mariozechner/pi-agent-core'
-import type { SessionRouteContext, ThinkingLevel } from '@webclaw/shared'
+import type { SessionRouteContext, ThinkingLevel } from '@lecquy/shared'
 import { buildWorkerPrompt } from '../core/prompts/system-prompts.js'
 import { createWorkerTools } from './tools/index.js'
 import { mutateProviderPayload } from './provider-payload.js'

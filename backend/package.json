@@ -1,5 +1,5 @@
 {
-  "name": "@webclaw/backend",
+  "name": "@lecquy/backend",
   "version": "1.0.0",
   "type": "module",
   "files": [
@@ -7,9 +7,9 @@
     "runtime-bundle.json"
   ],
   "scripts": {
-    "dev": "pnpm -F @webclaw/shared build && cross-env NODE_OPTIONS=--openssl-legacy-provider tsx --watch src/server.ts",
-    "build": "pnpm -F @webclaw/shared build && tsc",
-    "test": "pnpm -F @webclaw/shared build && tsc && find dist -name '*.test.js' -print0 | xargs -0 node --test",
+    "dev": "pnpm -F @lecquy/shared build && cross-env NODE_OPTIONS=--openssl-legacy-provider tsx --watch src/server.ts",
+    "build": "pnpm -F @lecquy/shared build && tsc",
+    "test": "pnpm -F @lecquy/shared build && tsc && find dist -name '*.test.js' -print0 | xargs -0 node --test",
     "start": "node dist/server.js",
     "db:migrate": "tsx src/db/migrate.ts",
     "pg:smoke": "tsx src/dev/pg-acceptance-smoke.ts",
@@ -20,7 +20,7 @@
     "@mariozechner/pi-agent-core": "^0.55.0",
     "@mariozechner/pi-ai": "^0.55.0",
     "@sinclair/typebox": "^0.34.48",
-    "@webclaw/shared": "workspace:*",
+    "@lecquy/shared": "workspace:*",
     "cors": "^2.8.5",
     "dmdb": "^1.0.46190",
     "dotenv": "^16.4.0",

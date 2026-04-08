@@ -1,4 +1,4 @@
-import { extractSessionText, type SessionEventEntry } from '@webclaw/shared'
+import { extractSessionText, type SessionEventEntry } from '@lecquy/shared'
 
 const COMPACT_MAX_SUMMARY_CHARS = 1_200
 const COMPACT_PREVIOUS_SUMMARY_CHARS = 280

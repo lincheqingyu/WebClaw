@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { FileText, Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import { AutoResizeTextarea } from './AutoResizeTextarea'
 import { CategoryTags } from './CategoryTags'
 import type { ChatMode } from '../../hooks/useChat'

@@ -8,12 +8,12 @@ import { migrateLegacyRuntimeStorage } from './runtime-storage-migration.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
 
 async function createWorkspace(): Promise<string> {
-  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'zxhclaw-runtime-'))
+  const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'lecquy-runtime-'))
   await mkdir(path.join(workspaceDir, 'backend'), { recursive: true })
   return workspaceDir
 }
 
-test('migrateLegacyRuntimeStorage merges legacy runtime dirs into root .ZxhClaw', async () => {
+test('migrateLegacyRuntimeStorage merges legacy runtime dirs into root .lecquy', async () => {
   const workspaceDir = await createWorkspace()
   const paths = resolveRuntimePaths(workspaceDir)
 
@@ -74,8 +74,8 @@ test('migrateLegacyRuntimeStorage merges legacy runtime dirs into root .ZxhClaw'
     await mkdir(path.join(workspaceDir, 'backend', 'docs'), { recursive: true })
     await writeFile(path.join(workspaceDir, 'backend', 'docs', 'cadre_comparison.html'), '<html>legacy</html>', 'utf8')
 
-    await mkdir(path.join(workspaceDir, 'backend', '.ZxhClaw', 'system-prompt'), { recursive: true })
-    await writeFile(path.join(workspaceDir, 'backend', '.ZxhClaw', 'system-prompt', 'custom.md'), 'legacy prompt\n', 'utf8')
+    await mkdir(path.join(workspaceDir, 'backend', '.lecquy', 'system-prompt'), { recursive: true })
+    await writeFile(path.join(workspaceDir, 'backend', '.lecquy', 'system-prompt', 'custom.md'), 'legacy prompt\n', 'utf8')
 
     await mkdir(path.join(workspaceDir, 'backend', '.sessions-v2', 'snapshots'), { recursive: true })
     await writeFile(path.join(workspaceDir, 'backend', '.sessions-v2', 'sessions.json'), '{"entries":{}}', 'utf8')
@@ -90,7 +90,7 @@ test('migrateLegacyRuntimeStorage merges legacy runtime dirs into root .ZxhClaw'
     const migratedSessionRaw = await readFile(path.join(paths.sessionStoreSessionsDir, 'sess_backend.jsonl'), 'utf8')
     assert.match(migratedSessionRaw, new RegExp(`"cwd":"${workspaceDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`))
     assert.match(migratedSessionRaw, /"generatedArtifacts":\[/)
-    assert.match(migratedSessionRaw, /\.ZxhClaw\/artifacts\/docs\/legacy\/cadre_comparison\.html/)
+    assert.match(migratedSessionRaw, /\.lecquy\/artifacts\/docs\/legacy\/cadre_comparison\.html/)
 
     const legacyDocs = await readdir(paths.artifactsLegacyDocsDir)
     assert.ok(legacyDocs.some((name) => name.startsWith('cadre_comparison')))
@@ -101,7 +101,7 @@ test('migrateLegacyRuntimeStorage merges legacy runtime dirs into root .ZxhClaw'
     assert.equal(existsSync(path.join(workspaceDir, 'backend', '.sessions-v3')), false)
     assert.equal(existsSync(path.join(workspaceDir, 'backend', '.memory')), false)
     assert.equal(existsSync(path.join(workspaceDir, 'backend', 'docs')), false)
-    assert.equal(existsSync(path.join(workspaceDir, 'backend', '.ZxhClaw')), false)
+    assert.equal(existsSync(path.join(workspaceDir, 'backend', '.lecquy')), false)
     assert.equal(existsSync(path.join(workspaceDir, 'backend', '.sessions-v2')), false)
   } finally {
     await rm(workspaceDir, { recursive: true, force: true })

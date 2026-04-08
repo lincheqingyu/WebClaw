@@ -2,7 +2,7 @@
 set -e
 
 # ============================
-# WebClaw 部署脚本（user-level systemd）
+# Lecquy 部署脚本（user-level systemd）
 #
 # 用法:
 #   bash deploy.sh              首次安装
@@ -13,14 +13,14 @@ set -e
 # ============================
 
 VERSION="v$(date +%Y.%-m.%-d)"
-WORKSPACE="$HOME/.webclaw/workspace"
-SERVICE_NAME="webclaw-backend"
+WORKSPACE="$HOME/.lecquy/workspace"
+SERVICE_NAME="lecquy-backend"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/$SERVICE_NAME.service"
 
-info() { echo -e "\033[32m[webclaw]\033[0m $1"; }
-warn() { echo -e "\033[33m[webclaw]\033[0m $1"; }
-err()  { echo -e "\033[31m[webclaw]\033[0m $1"; exit 1; }
+info() { echo -e "\033[32m[lecquy]\033[0m $1"; }
+warn() { echo -e "\033[33m[lecquy]\033[0m $1"; }
+err()  { echo -e "\033[31m[lecquy]\033[0m $1"; exit 1; }
 
 # ============================
 # 环境检查
@@ -41,9 +41,9 @@ build() {
     cd "$WORKSPACE"
 
     pnpm install --frozen-lockfile 2>/dev/null || pnpm install
-    pnpm -F @webclaw/shared build
-    pnpm -F @webclaw/frontend build
-    pnpm -F @webclaw/backend build
+    pnpm -F @lecquy/shared build
+    pnpm -F @lecquy/frontend build
+    pnpm -F @lecquy/backend build
 
     info "构建完成"
     info "  前端: $WORKSPACE/frontend/dist/"
@@ -60,7 +60,7 @@ install_service() {
     # 生成 service 文件（替换版本号）
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=WebClaw Backend ($VERSION)
+Description=Lecquy Backend ($VERSION)
 After=network-online.target
 Wants=network-online.target
 

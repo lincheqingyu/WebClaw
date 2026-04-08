@@ -1,4 +1,4 @@
-# WebClaw 前端开发文档（给 Codex）
+# Lecquy 前端开发文档（给 Codex）
 
 面向快速扩展与定位，重点是"怎么接入/扩展"。每个模块都给出关键文件路径。
 
@@ -10,14 +10,14 @@
 - 无路由库、无外部状态管理库
 - 图标：lucide-react
 - 工具：clsx + tailwind-merge
-- 共享类型：`@webclaw/shared`（workspace 引用）
+- 共享类型：`@lecquy/shared`（workspace 引用）
 
 **关键文件路径一览**
 
 ```
 frontend/
 ├── index.html                              # SPA 入口，挂载 <div id="root">
-├── package.json                            # @webclaw/frontend
+├── package.json                            # @lecquy/frontend
 ├── vite.config.ts                          # Vite + React + Tailwind CSS 4
 ├── tsconfig.app.json                       # ES2022, bundler moduleResolution, strict
 └── src/
@@ -118,9 +118,9 @@ index.html <div id="root">
 |---|---|---|---|
 | `isSettingsOpen` | `boolean` | `false` | 否 |
 | `isDark` | `boolean` | `false` | 否 |
-| `systemPrompts` | `SystemPromptItem[]` | localStorage 加载 | `webclaw.systemPrompts` |
-| `activePromptId` | `string \| null` | localStorage 加载 | `webclaw.activePromptId` |
-| `modelConfig` | `ModelConfig` | localStorage 加载 | `webclaw.modelConfig` |
+| `systemPrompts` | `SystemPromptItem[]` | localStorage 加载 | `lecquy.systemPrompts` |
+| `activePromptId` | `string \| null` | localStorage 加载 | `lecquy.activePromptId` |
+| `modelConfig` | `ModelConfig` | localStorage 加载 | `lecquy.modelConfig` |
 
 **useChat — 消息状态**
 
@@ -136,12 +136,12 @@ index.html <div id="root">
 
 | 键 | 归属 | 内容 |
 |---|---|---|
-| `webclaw.sessionId` | `lib/session.ts` | WS 会话标识符 |
-| `webclaw.systemPrompts` | `HomePageLayout` | `SystemPromptItem[]` JSON |
-| `webclaw.activePromptId` | `HomePageLayout` | 当前激活的系统提示词 ID |
-| `webclaw.modelConfig` | `HomePageLayout` | `ModelConfig` JSON |
-| `webclaw.modelPresets` | `SettingsDrawer` | `ModelPresetItem[]` JSON |
-| `webclaw.activeModelPresetId` | `SettingsDrawer` | 当前激活的模型预设 ID |
+| `lecquy.sessionId` | `lib/session.ts` | WS 会话标识符 |
+| `lecquy.systemPrompts` | `HomePageLayout` | `SystemPromptItem[]` JSON |
+| `lecquy.activePromptId` | `HomePageLayout` | 当前激活的系统提示词 ID |
+| `lecquy.modelConfig` | `HomePageLayout` | `ModelConfig` JSON |
+| `lecquy.modelPresets` | `SettingsDrawer` | `ModelPresetItem[]` JSON |
+| `lecquy.activeModelPresetId` | `SettingsDrawer` | 当前激活的模型预设 ID |
 
 **数据流模式**
 - 消息列表采用不可变模式更新（展开为新数组），streaming 时通过 `id` 匹配替换为新对象。
@@ -268,7 +268,7 @@ index.html <div id="root">
 ```
 
 3. 前端本地标识语义变更
-- 原 `webclaw.sessionId` 迁移为 `webclaw.peerId`（用于 route.peerId）
+- 原 `lecquy.sessionId` 迁移为 `lecquy.peerId`（用于 route.peerId）
 - 会话路由由后端返回 `session_key_resolved` 决定
 
 4. 需要处理的新服务端事件
@@ -297,7 +297,7 @@ index.html <div id="root">
 | `${API_V1}/memory/config` | PUT | 保存更新的 MemoryConfig（250ms 防抖） |
 | `${API_V1}/memory/file?name=...` | GET | 读取指定记忆文件内容 |
 
-## 8. 共享类型（@webclaw/shared）
+## 8. 共享类型（@lecquy/shared）
 
 **定位文件**
 - 入口：`shared/src/index.ts`
@@ -370,7 +370,7 @@ interface MemoryFileMeta { name, size, updatedAt }
 
 ### 添加新 localStorage 键
 
-1. 键名统一使用 `webclaw.` 前缀。
+1. 键名统一使用 `lecquy.` 前缀。
 2. 在本文档"localStorage 键清单"中登记。
 3. 读写时做 `try/catch`，兜底处理 localStorage 不可用的情况（参考 `lib/session.ts`）。
 

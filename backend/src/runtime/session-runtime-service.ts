@@ -25,7 +25,7 @@ import type {
   StepId,
   StepKind,
   WorkflowStatus,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import {
   createPauseId,
   createRunId,
@@ -35,7 +35,7 @@ import {
   normalizeSessionAssistantContent,
   normalizeSessionUserContent,
   resolveThinkingLevel,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import { getConfig, type Env } from '../config/index.js'
 import { logger } from '../utils/logger.js'
 import { createVllmModel } from '../agent/vllm-model.js'

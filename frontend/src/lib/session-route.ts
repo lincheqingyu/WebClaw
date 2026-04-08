@@ -1,4 +1,4 @@
-import type { SessionRouteContext } from '@webclaw/shared'
+import type { SessionRouteContext } from '@lecquy/shared'
 
 interface BuildRouteOptions {
   peerId: string

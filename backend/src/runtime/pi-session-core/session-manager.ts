@@ -2,10 +2,10 @@
  * Vendored and adapted from:
  * /Users/hqy/Documents/zxh/github/pi-mono/packages/coding-agent/src/core/session-manager.ts
  *
- * WebClaw adaptation notes:
+ * Lecquy adaptation notes:
  * - 保留 append-only tree 与 buildSessionContext 的核心语义
  * - 删除 CLI/TUI label/tree 渲染相关表面
- * - 新增 WebClaw workflow/runtime entries，但这些 entries 不参与 LLM context
+ * - 新增 Lecquy workflow/runtime entries，但这些 entries 不参与 LLM context
  * - buildSessionContext 只输出当前 agent runners 可消费的 user/assistant 消息
  */
 
@@ -27,7 +27,7 @@ import {
   extractSessionText,
   normalizeSessionAssistantContent,
   normalizeSessionUserContent,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import { formatCompactionContextMessage } from '../context/templates/compact-summary.template.js'
 import type {
   BranchSummaryEntry,
@@ -61,7 +61,7 @@ import type {
   ThinkingLevelChangeEntry,
   TodoUpdatedEntry,
   WorkflowStatus,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 
 export const CURRENT_SESSION_VERSION = 1
 

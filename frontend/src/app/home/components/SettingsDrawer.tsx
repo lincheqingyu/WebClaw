@@ -1,7 +1,7 @@
 import {ChevronDown, Trash2, X} from 'lucide-react'
 import {clsx} from 'clsx'
 import {useCallback, useEffect, useRef, useState} from 'react'
-import {createDefaultThinkingConfig, type ThinkingConfig, type ThinkingProtocol} from '@webclaw/shared'
+import {createDefaultThinkingConfig, type ThinkingConfig, type ThinkingProtocol} from '@lecquy/shared'
 import type {ModelConfig} from '../../../hooks/useChat'
 import {API_V1} from '../../../config/api.ts'
 import {
@@ -40,8 +40,8 @@ type InlineDropdownId = 'maxTokens' | 'thinkingProtocol' | 'thinkingLevel'
 type EditableContextFileName = Extract<ContextFileName, 'SOUL.md' | 'IDENTITY.md' | 'USER.md' | 'MEMORY.md'>
 type ManagedContextFileName = Extract<ContextFileName, 'AGENTS.md' | 'TOOLS.md'>
 
-const MODEL_PRESET_STORAGE_KEY = 'webclaw.modelPresets'
-const ACTIVE_MODEL_PRESET_STORAGE_KEY = 'webclaw.activeModelPresetId'
+const MODEL_PRESET_STORAGE_KEY = 'lecquy.modelPresets'
+const ACTIVE_MODEL_PRESET_STORAGE_KEY = 'lecquy.activeModelPresetId'
 const EDITABLE_CONTEXT_FILES: ReadonlyArray<{
     name: EditableContextFileName
     title: string
@@ -674,7 +674,7 @@ export function SettingsDrawer({
                             Soul · Identity · User · Memory
                         </span>
                         <span className="mt-1 block text-xs text-text-secondary">
-                            编辑 `.ZxhClaw` 上下文文件，系统托管 AGENTS / TOOLS 只读
+                            编辑 `.lecquy` 上下文文件，系统托管 AGENTS / TOOLS 只读
                         </span>
                         <div className="mt-3 flex flex-wrap gap-2">
                             {EDITABLE_CONTEXT_FILES.map((file) => (
@@ -997,8 +997,8 @@ export function SettingsDrawer({
                                     </div>
                                     <span className="shrink-0 rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] text-text-muted">
                                         {selectedManagedFile
-                                            ? contextFiles[selectedManagedFile]?.path ?? `.ZxhClaw/${selectedManagedFile}`
-                                            : contextFiles[selectedContextFile]?.path ?? `.ZxhClaw/${selectedContextFile}`}
+                                            ? contextFiles[selectedManagedFile]?.path ?? `.lecquy/${selectedManagedFile}`
+                                            : contextFiles[selectedContextFile]?.path ?? `.lecquy/${selectedContextFile}`}
                                     </span>
                                 </div>
                                 <div className="mt-2 truncate text-xs text-text-secondary">
@@ -1147,7 +1147,7 @@ export function SettingsDrawer({
                                 <div className="mt-4 text-xs text-text-muted">
                                     {selectedManagedFile
                                         ? 'Managed files are read-only.'
-                                        : `${contextSaveStatus === 'Editing' ? 'Saving...' : 'Saved'} · ${selectedContextFile === 'MEMORY.md' ? (memorySaveStatus === 'Editing' ? '同步保存 Memory runtime...' : 'Memory runtime 已同步') : 'Context files are saved to .ZxhClaw'}`}
+                                        : `${contextSaveStatus === 'Editing' ? 'Saving...' : 'Saved'} · ${selectedContextFile === 'MEMORY.md' ? (memorySaveStatus === 'Editing' ? '同步保存 Memory runtime...' : 'Memory runtime 已同步') : 'Context files are saved to .lecquy'}`}
                                 </div>
                             </div>
                         </div>

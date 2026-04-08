@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
 import dotenv from 'dotenv'
 import type { Pool } from 'pg'
@@ -8,9 +9,11 @@ import type {
   ServerEventPayloadMap,
   SessionMode,
   SessionRouteContext,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import { loadConfig } from '../config/index.js'
 import { closePool, getPool } from '../db/client.js'
+
+const WORKSPACE_ENV_PATH = fileURLToPath(new URL('../../../.env', import.meta.url))
 
 interface CountRow {
   readonly count: string | number
@@ -35,12 +38,17 @@ interface RunAcceptanceResult {
   readonly paused: boolean
 }
 
+function envFlag(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
 function loadWorkspaceEnv(): void {
-  dotenv.config({ path: '/Users/hqy/Documents/zxh/projects/ZxhClaw/.env' })
+  dotenv.config({ path: WORKSPACE_ENV_PATH })
   process.env.PG_ENABLED = 'true'
   process.env.PG_HOST ??= '127.0.0.1'
   process.env.PG_PORT ??= '5432'
-  process.env.PG_DATABASE ??= 'webclaw'
+  process.env.PG_DATABASE ??= 'lecquy'
   process.env.PG_USER ??= 'postgres'
   process.env.PG_SSL ??= 'false'
 }
@@ -258,6 +266,8 @@ async function main(): Promise<void> {
   const apiBase = getApiBase()
   const wsBase = getWsBase(apiBase)
   const pool = getPool()
+  const skipSimple = envFlag('WS_ACCEPT_SKIP_SIMPLE')
+  const skipPlan = envFlag('WS_ACCEPT_SKIP_PLAN')
 
   try {
     await waitForHealth(apiBase)
@@ -268,7 +278,10 @@ async function main(): Promise<void> {
     const simpleSystemPrompt = '你正在接受真实链路验收。不要使用工具，每次只用一句不超过 12 个字的中文回复。'
     const planSystemPrompt = [
       '你正在接受真实链路验收。',
-      '必须先调用 todo_write 创建至少 2 个简短 todo，再把它们更新为 completed。',
+      '第一步必须调用 todo_write 创建至少 2 个简短 todo。',
+      '在第一次 todo_write 之前，禁止输出自然语言。',
+      '创建后必须再次调用 todo_write，把全部任务更新为 completed。',
+      '如果你跳过 todo_write，这次验收算失败。',
       '不要使用工具，不要追问用户。',
       '最终答复保持简短。',
     ].join('\n')
@@ -282,144 +295,162 @@ async function main(): Promise<void> {
     let simpleSessionKey: string | undefined
     let simpleSessionId = ''
     let simpleStepStateCount = 0
+    let simpleHistoryEntryCount = 0
+    let simpleEventCount = 0
+    let simpleMessageCount = 0
+    let eventMemoryCount = 0
+    let compactionCount = 0
 
-    for (const [index, input] of simpleInputs.entries()) {
-      const result = await runWsConversation({
-        wsBase,
-        sessionKey: simpleSessionKey,
-        mode: 'simple',
-        input,
-        route: createRoute(simplePeerId),
-        modelOptions,
-        systemPrompt: simpleSystemPrompt,
-      })
-      simpleSessionKey = result.sessionKey
-      simpleSessionId = result.sessionId
-      simpleStepStateCount += result.stepStateCount
-      assert.equal(result.paused, false, 'simple run should not pause')
-      assert.ok(result.statuses.includes('running'))
-      assert.equal(result.statuses[result.statuses.length - 1], 'completed')
+    if (!skipSimple) {
+      for (const [index, input] of simpleInputs.entries()) {
+        const result = await runWsConversation({
+          wsBase,
+          sessionKey: simpleSessionKey,
+          mode: 'simple',
+          input,
+          route: createRoute(simplePeerId),
+          modelOptions,
+          systemPrompt: simpleSystemPrompt,
+        })
+        simpleSessionKey = result.sessionKey
+        simpleSessionId = result.sessionId
+        simpleStepStateCount += result.stepStateCount
+        assert.equal(result.paused, false, 'simple run should not pause')
+        assert.ok(result.statuses.includes('running'))
+        assert.equal(result.statuses[result.statuses.length - 1], 'completed')
 
-      if (index === 1) {
-        await waitForCondition(
-          'event memory items',
-          async () => {
-            const eventCount = await countRows(
-              pool,
-              `
-                SELECT COUNT(*) AS count
-                FROM memory_items
-                WHERE session_id = $1
-                  AND kind = 'event'
-              `,
-              [simpleSessionId],
-            )
-            return eventCount > 0
-          },
-          {
-            // Live extraction can spend tens of seconds retrying the model
-            // before it falls back to heuristic insertion.
-            timeoutMs: 75_000,
-          },
-        )
+        if (index === 1) {
+          await waitForCondition(
+            'event memory items',
+            async () => {
+              const currentEventMemoryCount = await countRows(
+                pool,
+                `
+                  SELECT COUNT(*) AS count
+                  FROM memory_items
+                  WHERE session_id = $1
+                    AND kind = 'event'
+                `,
+                [simpleSessionId],
+              )
+              return currentEventMemoryCount > 0
+            },
+            {
+              // Live extraction can spend tens of seconds retrying the model
+              // before it falls back to heuristic insertion.
+              timeoutMs: 75_000,
+            },
+          )
+        }
       }
+
+      const simpleHistory = await fetchHistoryView(apiBase, simpleSessionKey ?? '')
+      simpleHistoryEntryCount = simpleHistory.entries.length
+      simpleEventCount = await countRows(
+        pool,
+        `
+          SELECT COUNT(*) AS count
+          FROM session_events
+          WHERE session_id = $1
+        `,
+        [simpleSessionId],
+      )
+      simpleMessageCount = await countRows(
+        pool,
+        `
+          SELECT COUNT(*) AS count
+          FROM session_events
+          WHERE session_id = $1
+            AND event_type = 'message'
+        `,
+        [simpleSessionId],
+      )
+      eventMemoryCount = await countRows(
+        pool,
+        `
+          SELECT COUNT(*) AS count
+          FROM memory_items
+          WHERE session_id = $1
+            AND kind = 'event'
+        `,
+        [simpleSessionId],
+      )
+      compactionCount = await countRows(
+        pool,
+        `
+          SELECT COUNT(*) AS count
+          FROM session_events
+          WHERE session_id = $1
+            AND event_type = 'compaction'
+        `,
+        [simpleSessionId],
+      )
+
+      assert.ok(simpleHistory.entries.length > 0)
+      assert.ok(simpleStepStateCount > 0)
+      assert.ok(simpleEventCount > 0)
+      assert.ok(simpleMessageCount >= 50)
+      assert.ok(eventMemoryCount > 0)
+      assert.ok(compactionCount > 0)
     }
 
-    const simpleHistory = await fetchHistoryView(apiBase, simpleSessionKey ?? '')
-    const simpleEventCount = await countRows(
-      pool,
-      `
-        SELECT COUNT(*) AS count
-        FROM session_events
-        WHERE session_id = $1
-      `,
-      [simpleSessionId],
-    )
-    const simpleMessageCount = await countRows(
-      pool,
-      `
-        SELECT COUNT(*) AS count
-        FROM session_events
-        WHERE session_id = $1
-          AND event_type = 'message'
-      `,
-      [simpleSessionId],
-    )
-    const eventMemoryCount = await countRows(
-      pool,
-      `
-        SELECT COUNT(*) AS count
-        FROM memory_items
-        WHERE session_id = $1
-          AND kind = 'event'
-      `,
-      [simpleSessionId],
-    )
-    const compactionCount = await countRows(
-      pool,
-      `
-        SELECT COUNT(*) AS count
-        FROM session_events
-        WHERE session_id = $1
-          AND event_type = 'compaction'
-      `,
-      [simpleSessionId],
-    )
+    let planResult: RunAcceptanceResult | null = null
+    let planHistoryEntryCount = 0
+    let planHistoryHasTodoUpdated = false
+    let foresightCount = 0
 
-    assert.ok(simpleHistory.entries.length > 0)
-    assert.ok(simpleStepStateCount > 0)
-    assert.ok(simpleEventCount > 0)
-    assert.ok(simpleMessageCount >= 50)
-    assert.ok(eventMemoryCount > 0)
-    assert.ok(compactionCount > 0)
+    if (!skipPlan) {
+      planResult = await runWsConversation({
+        wsBase,
+        mode: 'plan',
+        input: '第一步只允许调用 todo_write 创建两个任务：1）整理 PG 链路验收结果；2）写出下一步动作。第二步再次调用 todo_write，把这两个任务都更新为 completed。完成后最后只给我一句简短总结。',
+        route: createRoute(planPeerId),
+        modelOptions,
+        systemPrompt: planSystemPrompt,
+      })
+      const resolvedPlanResult = planResult
 
-    const planResult = await runWsConversation({
-      wsBase,
-      mode: 'plan',
-      input: '请先用 todo_write 创建两个任务：1）整理 PG 链路验收结果；2）写出下一步动作。然后把这两个任务都更新为 completed，最后只给我一句简短总结。',
-      route: createRoute(planPeerId),
-      modelOptions,
-      systemPrompt: planSystemPrompt,
-    })
-
-    const planHistory = await fetchHistoryView(apiBase, planResult.sessionKey)
-    await waitForCondition(
-      'foresight items',
-      async () => {
-        const foresightCount = await countRows(
-          pool,
-          `
-            SELECT COUNT(*) AS count
-            FROM memory_items
-            WHERE session_id = $1
-              AND kind = 'foresight'
-          `,
-          [planResult.sessionId],
-        )
-        return foresightCount > 0
-      },
-      {
-        timeoutMs: 15_000,
-      },
-    )
-    const foresightCount = await countRows(
-      pool,
-      `
+      const planHistory = await fetchHistoryView(apiBase, resolvedPlanResult.sessionKey)
+      planHistoryEntryCount = planHistory.entries.length
+      planHistoryHasTodoUpdated = planHistory.entries.some((entry) => entry.type === 'todo_updated')
+      await waitForCondition(
+        'foresight items',
+        async () => {
+          const currentForesightCount = await countRows(
+            pool,
+            `
+              SELECT COUNT(*) AS count
+              FROM memory_items
+              WHERE session_id = $1
+                AND kind = 'foresight'
+            `,
+            [resolvedPlanResult.sessionId],
+          )
+          return currentForesightCount > 0
+        },
+        {
+          timeoutMs: 15_000,
+        },
+      )
+      foresightCount = await countRows(
+        pool,
+        `
         SELECT COUNT(*) AS count
         FROM memory_items
         WHERE session_id = $1
           AND kind = 'foresight'
       `,
-      [planResult.sessionId],
-    )
+      [resolvedPlanResult.sessionId],
+      )
 
-    assert.equal(planResult.paused, false, 'plan run should not pause')
-    assert.ok(planResult.statuses.includes('running'))
-    assert.equal(planResult.statuses[planResult.statuses.length - 1], 'completed')
-    assert.ok(planResult.stepStateCount > 0)
-    assert.ok(planResult.todoStateCount > 0)
-    assert.ok(planHistory.entries.some((entry) => entry.type === 'todo_updated'))
-    assert.ok(foresightCount > 0)
+      assert.equal(resolvedPlanResult.paused, false, 'plan run should not pause')
+      assert.ok(resolvedPlanResult.statuses.includes('running'))
+      assert.equal(resolvedPlanResult.statuses[resolvedPlanResult.statuses.length - 1], 'completed')
+      assert.ok(resolvedPlanResult.stepStateCount > 0)
+      assert.ok(resolvedPlanResult.todoStateCount > 0)
+      assert.ok(planHistoryHasTodoUpdated)
+      assert.ok(foresightCount > 0)
+    }
 
     console.log(JSON.stringify({
       validationMode: 'frontend-compatible-ws-client',
@@ -428,23 +459,24 @@ async function main(): Promise<void> {
         apiBase,
         health: 'ok',
       },
-      simple: {
+      simple: skipSimple ? { skipped: true } : {
         sessionKey: simpleSessionKey,
         sessionId: simpleSessionId,
         turns: simpleInputs.length,
         wsStepStateCount: simpleStepStateCount,
-        historyViewEntryCount: simpleHistory.entries.length,
+        historyViewEntryCount: simpleHistoryEntryCount,
         pgSessionEvents: simpleEventCount,
         pgMessageEvents: simpleMessageCount,
         pgEventMemoryItems: eventMemoryCount,
         pgCompactionEvents: compactionCount,
       },
-      plan: {
+      plan: skipPlan || !planResult ? { skipped: true } : {
         sessionKey: planResult.sessionKey,
         sessionId: planResult.sessionId,
         wsStepStateCount: planResult.stepStateCount,
         wsTodoStateCount: planResult.todoStateCount,
-        historyViewEntryCount: planHistory.entries.length,
+        historyViewEntryCount: planHistoryEntryCount,
+        historyHasTodoUpdated: planHistoryHasTodoUpdated,
         pgForesightItems: foresightCount,
       },
     }, null, 2))

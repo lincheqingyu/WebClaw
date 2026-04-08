@@ -1,5 +1,5 @@
 {
-  "name": "@webclaw/frontend",
+  "name": "@lecquy/frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,7 @@
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
-    "@webclaw/shared": "workspace:*",
+    "@lecquy/shared": "workspace:*",
     "clsx": "^2.1.1",
     "docx-preview": "0.3.7",
     "lucide-react": "^0.563.0",

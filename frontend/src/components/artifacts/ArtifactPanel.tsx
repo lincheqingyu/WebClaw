@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { ChevronDown, Code2, Copy, Eye, FileCode2, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArtifactDetail } from '@webclaw/shared'
+import type { ArtifactDetail } from '@lecquy/shared'
 import { renderMarkdown } from '../chat/MessageItem'
 import { fetchArtifactDetail, buildArtifactDownloadUrl } from '../../lib/session-api'
 import { formatBytes, inferArtifactPreviewMode, inferArtifactTypeLabel, inferCodeLanguage, inferFileExtension } from '../../lib/file-display'

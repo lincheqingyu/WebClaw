@@ -30,7 +30,7 @@ trap cleanup EXIT
 export PG_ENABLED="${PG_ENABLED:-true}"
 export PG_HOST="${PG_HOST:-127.0.0.1}"
 export PG_PORT="${PG_PORT:-5432}"
-export PG_DATABASE="${PG_DATABASE:-webclaw}"
+export PG_DATABASE="${PG_DATABASE:-lecquy}"
 export PG_USER="${PG_USER:-postgres}"
 export PG_PASSWORD="${PG_PASSWORD:-}"
 export PG_SSL="${PG_SSL:-false}"

@@ -16,16 +16,16 @@ const CACHE_ROOT = path.join(RELEASE_ROOT, '.cache')
 const RUNTIME_BUNDLE_PATH = path.join(ROOT_DIR, 'backend', 'runtime-bundle.json')
 const README_PATH = path.join(ROOT_DIR, 'deploy', 'PORTABLE-RELEASE.md')
 const ENV_EXAMPLE_PATH = path.join(ROOT_DIR, '.env.example')
-const NODE_VERSION = process.env.WEBCLAW_SEA_NODE_VERSION?.trim() || process.version.replace(/^v/, '')
+const NODE_VERSION = process.env.LECQUY_SEA_NODE_VERSION?.trim() || process.version.replace(/^v/, '')
 const NODE_MAJOR = NODE_VERSION.split('.')[0] ?? '22'
-const NODE_DIST_BASE_URL = process.env.WEBCLAW_SEA_NODE_DIST_BASE_URL?.trim() || 'https://nodejs.org/dist'
+const NODE_DIST_BASE_URL = process.env.LECQUY_SEA_NODE_DIST_BASE_URL?.trim() || 'https://nodejs.org/dist'
 const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'
 
 const TARGETS = {
   'macos-arm64': {
     archiveName: `node-v${NODE_VERSION}-darwin-arm64.tar.xz`,
     extractedExecutablePath: path.join(`node-v${NODE_VERSION}-darwin-arm64`, 'bin', 'node'),
-    outputFileName: 'webclaw-macos-arm64',
+    outputFileName: 'lecquy-macos-arm64',
     postjectArgs: ['--macho-segment-name', 'NODE_SEA'],
     executableLabel: 'macOS arm64',
     isWindows: false,
@@ -34,7 +34,7 @@ const TARGETS = {
   'linux-arm64': {
     archiveName: `node-v${NODE_VERSION}-linux-arm64.tar.xz`,
     extractedExecutablePath: path.join(`node-v${NODE_VERSION}-linux-arm64`, 'bin', 'node'),
-    outputFileName: 'webclaw-linux-arm64',
+    outputFileName: 'lecquy-linux-arm64',
     postjectArgs: [],
     executableLabel: 'Linux arm64',
     isWindows: false,
@@ -43,7 +43,7 @@ const TARGETS = {
   'windows-x64': {
     archiveName: `node-v${NODE_VERSION}-win-x64.zip`,
     extractedExecutablePath: path.join(`node-v${NODE_VERSION}-win-x64`, 'node.exe'),
-    outputFileName: 'webclaw-server.exe',
+    outputFileName: 'lecquy-server.exe',
     postjectArgs: [],
     executableLabel: 'Windows x64',
     isWindows: true,
@@ -232,7 +232,7 @@ function injectSeaBlob(target, executablePath, blobPath) {
 
 async function prepareReleaseDir(releaseDir) {
   await removeIfExists(releaseDir)
-  await fs.mkdir(path.join(releaseDir, '.ZxhClaw', 'skills'), { recursive: true })
+  await fs.mkdir(path.join(releaseDir, '.lecquy', 'skills'), { recursive: true })
   await fs.copyFile(ENV_EXAMPLE_PATH, path.join(releaseDir, '.env.example'))
   await fs.copyFile(README_PATH, path.join(releaseDir, 'README.md'))
 
@@ -243,13 +243,13 @@ async function prepareReleaseDir(releaseDir) {
       'set -eu',
       'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
       'cd "$SCRIPT_DIR"',
-      'if [ -x ./webclaw-macos-arm64 ]; then',
-      '  exec ./webclaw-macos-arm64 "$@"',
+      'if [ -x ./lecquy-macos-arm64 ]; then',
+      '  exec ./lecquy-macos-arm64 "$@"',
       'fi',
-      'if [ -x ./webclaw-linux-arm64 ]; then',
-      '  exec ./webclaw-linux-arm64 "$@"',
+      'if [ -x ./lecquy-linux-arm64 ]; then',
+      '  exec ./lecquy-linux-arm64 "$@"',
       'fi',
-      'echo "No WebClaw executable found in this directory." >&2',
+      'echo "No Lecquy executable found in this directory." >&2',
       'exit 1',
       '',
     ].join('\n'),
@@ -261,7 +261,7 @@ async function prepareReleaseDir(releaseDir) {
       '@echo off',
       'setlocal',
       'cd /d "%~dp0"',
-      'webclaw-server.exe %*',
+      'lecquy-server.exe %*',
       '',
     ].join('\r\n'),
     'utf8',

@@ -1,18 +1,18 @@
-# Claude Code 对 WebClaw 的可借鉴能力清单与 6 个月路线
+# Claude Code 对 Lecquy 的可借鉴能力清单与 6 个月路线
 
 ## 目的
 
 这份文档不是为了“复刻 Claude Code”，而是为了回答一个更实际的问题：
 
-- Claude Code 反编译仓库里，哪些能力值得 WebClaw 借鉴
+- Claude Code 反编译仓库里，哪些能力值得 Lecquy 借鉴
 - 这些能力为什么值得借鉴
 - 哪些部分不应该照搬
 - 从 `2026-04-01` 开始，未来 6 个月应该按什么顺序吸收
 
 这份文档默认建立在两条既定方向之上：
 
-- WebClaw 的最终目标是“个人强 Agent”
-- WebClaw 的记忆系统一期仍按 [`memory-system-phase1-ts-plan.md`](./memory-system-phase1-ts-plan.md) 和 [`memory-system-phase1-backend-checklist.md`](./memory-system-phase1-backend-checklist.md) 推进，而不是回退到文件型长期记忆底座
+- Lecquy 的最终目标是“个人强 Agent”
+- Lecquy 的记忆系统一期仍按 [`20260408-5-记忆系统一期 TS 方案 开发规划.md`](./20260408-5-记忆系统一期 TS 方案 开发规划.md) 和 [`20260408-4-记忆系统一期后端实施 开发规划.md`](./20260408-4-记忆系统一期后端实施 开发规划.md) 推进，而不是回退到文件型长期记忆底座
 
 ## 审阅范围
 
@@ -31,10 +31,10 @@
 - Claude Code 历史/会话：`/Users/hqy/Documents/zxh/github/Kuberwastaken-src/history.ts`
 - Claude Code 记忆类型与 recall 规则：`/Users/hqy/Documents/zxh/github/Kuberwastaken-src/memdir/memoryTypes.ts`
 - Claude Code autoDream 记忆归纳：`/Users/hqy/Documents/zxh/github/Kuberwastaken-src/services/autoDream/consolidationPrompt.ts`
-- WebClaw 当前会话运行时：[`backend/src/runtime/session-runtime-service.ts`](../../backend/src/runtime/session-runtime-service.ts)
-- WebClaw 当前会话事件持久化：[`backend/src/runtime/pi-session-core/session-manager.ts`](../../backend/src/runtime/pi-session-core/session-manager.ts)
-- WebClaw 当前 memory flush：[`backend/src/memory/flush.ts`](../../backend/src/memory/flush.ts)
-- WebClaw 当前 agent 主链路：[`backend/src/agent/agent-runner.ts`](../../backend/src/agent/agent-runner.ts)
+- Lecquy 当前会话运行时：[`backend/src/runtime/session-runtime-service.ts`](../../backend/src/runtime/session-runtime-service.ts)
+- Lecquy 当前会话事件持久化：[`backend/src/runtime/pi-session-core/session-manager.ts`](../../backend/src/runtime/pi-session-core/session-manager.ts)
+- Lecquy 当前 memory flush：[`backend/src/memory/flush.ts`](../../backend/src/memory/flush.ts)
+- Lecquy 当前 agent 主链路：[`backend/src/agent/agent-runner.ts`](../../backend/src/agent/agent-runner.ts)
 
 ## 总判断
 
@@ -49,19 +49,19 @@
 
 原因很简单：
 
-- Claude Code 已经是一个非常成熟的 CLI Agent 产品，所以它在“能力面”上比 WebClaw 更宽
-- WebClaw 当前是 `浏览器 + Express + WebSocket + shared types` 的分层 Web 架构，可塑性更强
-- Claude Code 公开暴露出来的长期状态仍明显偏向 `JSONL + memory dir + MEMORY.md` 文件体系，这一点和 WebClaw 当前早期状态相似，但不适合成为 WebClaw 的长期地基
+- Claude Code 已经是一个非常成熟的 CLI Agent 产品，所以它在“能力面”上比 Lecquy 更宽
+- Lecquy 当前是 `浏览器 + Express + WebSocket + shared types` 的分层 Web 架构，可塑性更强
+- Claude Code 公开暴露出来的长期状态仍明显偏向 `JSONL + memory dir + MEMORY.md` 文件体系，这一点和 Lecquy 当前早期状态相似，但不适合成为 Lecquy 的长期地基
 
 ## 当前对比
 
-| 维度 | Claude Code | WebClaw 当前状态 | 判断 |
+| 维度 | Claude Code | Lecquy 当前状态 | 判断 |
 | --- | --- | --- | --- |
-| 产品形态 | 一体化 CLI Agent | Web 前后端分层 | WebClaw 更适合演进成“个人强 Agent Web 产品” |
-| 会话存储 | 文件型 transcript/history | `runtime index + session JSONL event log` | 两边当前都偏文件存储，但 WebClaw 已切到 runtime 事件流 |
-| 记忆系统 | 文件型 memory dir + consolidation | `MEMORY.md + daily markdown flush` | WebClaw 必须尽快升级为数据库化记忆 |
+| 产品形态 | 一体化 CLI Agent | Web 前后端分层 | Lecquy 更适合演进成“个人强 Agent Web 产品” |
+| 会话存储 | 文件型 transcript/history | `runtime index + session JSONL event log` | 两边当前都偏文件存储，但 Lecquy 已切到 runtime 事件流 |
+| 记忆系统 | 文件型 memory dir + consolidation | `MEMORY.md + daily markdown flush` | Lecquy 必须尽快升级为数据库化记忆 |
 | 扩展机制 | plugins / skills / hooks / MCP 很成熟 | 工具链已存在，但体系化不足 | Claude Code 的扩展设计很值得借鉴 |
-| 主动能力 | 已有 KAIROS / PROACTIVE 痕迹 | 仍以“被动响应” 为主 | 这是 WebClaw 后续最该补的一层 |
+| 主动能力 | 已有 KAIROS / PROACTIVE 痕迹 | 仍以“被动响应” 为主 | 这是 Lecquy 后续最该补的一层 |
 | 复杂任务编排 | coordinator / swarm / worktree | 有 agent loop，但缺并行工作流抽象 | 可作为中期目标吸收 |
 
 ## 值得借鉴的能力
@@ -77,9 +77,9 @@
 
 - 这说明 Claude Code 的设计目标已经不只是“回合制问答”
 - 系统给 Agent 留出了主动触发、主动总结、主动打断和主动提醒的空间
-- 这和 WebClaw 的最终方向高度一致，因为“个人强 Agent”必须逐步从被动回答进化到主动推进任务
+- 这和 Lecquy 的最终方向高度一致，因为“个人强 Agent”必须逐步从被动回答进化到主动推进任务
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
 - [`backend/src/agent/agent-runner.ts`](../../backend/src/agent/agent-runner.ts) 的 `runSimpleAgent()` 仍是典型的请求驱动型 loop，见 `55-173` 行
 - 当前没有独立的主动触发层，也没有 session checkpoint 或 brief 概念
@@ -91,7 +91,7 @@
 
 **为什么优先级高**
 
-- 这是 WebClaw 从“AI Web 聊天工具”走向“个人强 Agent”的关键分水岭
+- 这是 Lecquy 从“AI Web 聊天工具”走向“个人强 Agent”的关键分水岭
 
 ### 2. autoDream 式记忆归纳
 
@@ -104,9 +104,9 @@
 
 - Claude Code 没有把 memory 理解成“堆原始对话”
 - 它明确承认：长期记忆必须经过压缩、合并、纠错、去重，才能在后续会话里持续有用
-- 这个思路和 WebClaw 现有记忆方案天然兼容，尤其适合你的 `profile / episodic / event / foresight` 四层 schema
+- 这个思路和 Lecquy 现有记忆方案天然兼容，尤其适合你的 `profile / episodic / event / foresight` 四层 schema
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
 - [`backend/src/memory/flush.ts`](../../backend/src/memory/flush.ts) 在 `44-69` 行只是按轮次阈值，把最后一轮摘要写进 daily memory markdown
 - 这更像“原始材料沉淀”，还不是“记忆系统归纳层”
@@ -134,9 +134,9 @@
 - Claude Code 的很多能力不是硬编码在单一路径里，而是通过扩展点叠加出来
 - 你的后续目标里已经包括搜索、记忆、自动任务，这三类能力都非常需要稳定扩展点
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
-- WebClaw 已经有工具层和 agent loop
+- Lecquy 已经有工具层和 agent loop
 - 但“技能、钩子、自动化触发器、插件化能力”还没有沉淀成统一骨架
 
 **建议怎么借**
@@ -158,10 +158,10 @@
 
 **为什么值得借鉴**
 
-- WebClaw 现在做的是 agent 产品，不是普通聊天应用
+- Lecquy 现在做的是 agent 产品，不是普通聊天应用
 - 一旦你继续增强 bash、文件编辑、自动任务、搜索等能力，权限边界就会直接影响是否可上线、可本地长期使用、可放心自动化
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
 - 有工具执行能力
 - 但护栏仍偏轻量，更多是主链路约束，而不是系统化 policy 层
@@ -187,7 +187,7 @@
 
 - 它体现的不是“JSONL 技巧”，而是产品意识：过去发生了什么要能回看、当前项目相关历史要能筛出来、用户粘贴的大块内容不能简单丢失、会话恢复和历史搜索必须可靠
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
 - [`backend/src/runtime/session-runtime-service.ts`](../../backend/src/runtime/session-runtime-service.ts) 在 `466-499` 行负责 index 持久化与 projection 刷新
 - [`backend/src/runtime/pi-session-core/session-manager.ts`](../../backend/src/runtime/pi-session-core/session-manager.ts) 在 `767-785` 行维护 append-only session JSONL
@@ -200,7 +200,7 @@
 
 **为什么优先级中高**
 
-- 这会直接提升 WebClaw 从“聊天室”到“工作台”的连续性
+- 这会直接提升 Lecquy 从“聊天室”到“工作台”的连续性
 
 ### 6. worktree / coordinator / 并行任务能力
 
@@ -214,7 +214,7 @@
 - Claude Code 已经在考虑复杂任务如何拆分、并行、恢复和隔离
 - 这对“强 agent 做长期复杂任务”非常关键，因为复杂任务最后一定不是一个单回合能做完的
 
-**WebClaw 当前对应状态**
+**Lecquy 当前对应状态**
 
 - 已有 agent loop 和工具能力
 - 但任务分解、并行子任务、隔离执行空间这些抽象还不成体系
@@ -234,9 +234,9 @@
 
 `/Users/hqy/Documents/zxh/github/Kuberwastaken-src/main.tsx` 几乎承担了产品总装配角色，能力很强，但也非常重。
 
-不建议 WebClaw 学这一点，原因是：
+不建议 Lecquy 学这一点，原因是：
 
-- WebClaw 当前前后端边界更清晰
+- Lecquy 当前前后端边界更清晰
 - 未来还要继续做 Web 产品，不是纯 CLI 产品
 - 如果过早把大量能力硬塞回单体入口，会破坏你现在最有价值的结构优势
 
@@ -244,7 +244,7 @@
 
 `memoryTypes.ts` 和 `consolidationPrompt.ts` 很有价值，但它们代表的仍然是“高级文件记忆系统”，不是强结构化数据库记忆系统。尤其是 `/Users/hqy/Documents/zxh/github/Kuberwastaken-src/memdir/memoryTypes.ts:245-255` 明确提醒“memory says X existed then，不等于 X 现在还存在”，这更说明它本质上是时间快照式记忆，而不是结构化业务真相源。
 
-不建议 WebClaw 把它当最终底座，原因是：
+不建议 Lecquy 把它当最终底座，原因是：
 
 - 你的部署、维护、回填、检索增强都需要结构化存储
 - 你已经准备引入 `PostgreSQL + pgvector + FTS/pg_trgm`
@@ -254,10 +254,10 @@
 
 Claude Code 在 `main.tsx` 中已经有大量 remote managed settings、policy limits、enterprise MCP config 逻辑。
 
-这些东西不适合 WebClaw 现在优先吸收，原因是：
+这些东西不适合 Lecquy 现在优先吸收，原因是：
 
 - 它们更像成熟产品的规模化配置层
-- 当前 WebClaw 的真正瓶颈还不是“组织级配置分发”
+- 当前 Lecquy 的真正瓶颈还不是“组织级配置分发”
 - 过早引入会抢走记忆、主动能力、任务闭环的研发带宽
 
 ## 建议的吸收顺序
@@ -273,7 +273,7 @@ Claude Code 在 `main.tsx` 中已经有大量 remote managed settings、policy l
 
 这个顺序不是在说 worktree 不重要，而是在说：
 
-- 现在最值钱的是把 WebClaw 从“能聊”推进到“能记、能推进、能持续协作”
+- 现在最值钱的是把 Lecquy 从“能聊”推进到“能记、能推进、能持续协作”
 - 不是先把系统做得很炫很大
 
 ## 未来 6 个月路线
@@ -333,7 +333,7 @@ Claude Code 在 `main.tsx` 中已经有大量 remote managed settings、policy l
 **目标**
 
 - 引入最小主动能力，不做“常驻聊天人格”
-- 先让 WebClaw 会在关键节点自动推进任务和整理上下文
+- 先让 Lecquy 会在关键节点自动推进任务和整理上下文
 
 **借鉴 Claude Code 的地方**
 
@@ -418,16 +418,16 @@ Claude Code 在 `main.tsx` 中已经有大量 remote managed settings、policy l
 
 **为什么这是 6 个月终点**
 
-- 到这一步，WebClaw 会从“有记忆规划”变成“真正具备连续性和主动性的 Agent 工作台”
+- 到这一步，Lecquy 会从“有记忆规划”变成“真正具备连续性和主动性的 Agent 工作台”
 
 ## 最终建议
 
 如果只保留最重要的三句话：
 
 - `Claude Code 最值得借的是主动性、归纳能力、扩展体系，不是文件底座。`
-- `WebClaw 未来 6 个月最该做的是：先记忆地基，再归纳层，再主动层。`
+- `Lecquy 未来 6 个月最该做的是：先记忆地基，再归纳层，再主动层。`
 - `真正不该摇摆的方向是：继续坚持数据库化四层记忆，不回退到文件系统中心架构。`
 
 补充：
 
-- 未来两周的实际落地顺序已经收敛到 [`memory-system-phase1-backend-checklist.md`](./memory-system-phase1-backend-checklist.md)，短期内优先看它。
+- 未来两周的实际落地顺序已经收敛到 [`20260408-4-记忆系统一期后端实施 开发规划.md`](./20260408-4-记忆系统一期后端实施 开发规划.md)，短期内优先看它。

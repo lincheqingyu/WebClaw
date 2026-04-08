@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg'
-import { extractSessionText, type SessionEventEntry, type SessionProjection } from '@webclaw/shared'
+import { extractSessionText, type SessionEventEntry, type SessionProjection } from '@lecquy/shared'
 
 function toTimestamp(value?: number): Date {
   return new Date(value ?? Date.now())

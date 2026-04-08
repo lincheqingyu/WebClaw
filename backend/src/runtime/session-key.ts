@@ -1,4 +1,4 @@
-import type { SessionChannel, SessionKind, SessionRouteContext } from '@webclaw/shared'
+import type { SessionChannel, SessionKind, SessionRouteContext } from '@lecquy/shared'
 
 function sanitize(value: string | undefined): string | null {
   if (!value) return null

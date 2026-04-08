@@ -2,8 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { isSea } from 'node:sea'
 
-export const GENERATED_ARTIFACT_DOCS_DIR = '.ZxhClaw/artifacts/docs'
-export const DEFAULT_SESSION_STORE_DIR = '.ZxhClaw/sessions/v3'
+export const GENERATED_ARTIFACT_DOCS_DIR = '.lecquy/artifacts/docs'
+export const DEFAULT_SESSION_STORE_DIR = '.lecquy/sessions/v3'
 
 export interface RuntimePaths {
   readonly workspaceDir: string
@@ -31,15 +31,20 @@ export interface RuntimePaths {
   readonly legacyBackendMemoryDir: string
   readonly legacyBackendMemoryFile: string
   readonly legacyBackendDocsDir: string
-  readonly legacyBackendRuntimeRootDir: string
+  readonly legacyRootRuntimeRootDirs: readonly string[]
+  readonly legacyBackendRuntimeRootDirs: readonly string[]
 }
+
+const LEGACY_ROOT_RUNTIME_DIR_NAMES = ['.ZxhClaw', '.webclaw'] as const
+const LEGACY_BACKEND_RUNTIME_DIR_NAMES = ['.lecquy', '.ZxhClaw', '.webclaw'] as const
 
 function looksLikeWorkspaceRoot(candidateDir: string): boolean {
   return (
     fs.existsSync(path.join(candidateDir, 'backend')) ||
     fs.existsSync(path.join(candidateDir, 'frontend')) ||
     fs.existsSync(path.join(candidateDir, 'pnpm-workspace.yaml')) ||
-    fs.existsSync(path.join(candidateDir, '.ZxhClaw')) ||
+    fs.existsSync(path.join(candidateDir, '.lecquy')) ||
+    LEGACY_ROOT_RUNTIME_DIR_NAMES.some((dirName) => fs.existsSync(path.join(candidateDir, dirName))) ||
     fs.existsSync(path.join(candidateDir, '.env'))
   )
 }
@@ -55,7 +60,8 @@ function detectWorkspaceRootFromBackendDir(backendDir: string): string | null {
     fs.existsSync(path.join(parentDir, 'pnpm-workspace.yaml')) ||
     fs.existsSync(path.join(parentDir, '.env')) ||
     fs.existsSync(path.join(parentDir, '.env.example')) ||
-    fs.existsSync(path.join(parentDir, '.ZxhClaw'))
+    fs.existsSync(path.join(parentDir, '.lecquy')) ||
+    LEGACY_ROOT_RUNTIME_DIR_NAMES.some((dirName) => fs.existsSync(path.join(parentDir, dirName)))
   )
 
   return looksLikeParentWorkspace ? parentDir : null
@@ -80,7 +86,7 @@ export function resolveWorkspaceRoot(workspaceDir?: string): string {
     return path.resolve(workspaceDir)
   }
 
-  const envWorkspaceRoot = process.env.WEBCLAW_WORKSPACE_ROOT?.trim()
+  const envWorkspaceRoot = process.env.LECQUY_WORKSPACE_ROOT?.trim()
   if (envWorkspaceRoot) {
     return path.resolve(envWorkspaceRoot)
   }
@@ -112,7 +118,7 @@ export function resolvePathWithinRoot(rootDir: string, targetPath: string): stri
 export function resolveRuntimePaths(workspaceDir?: string, sessionStoreDir = DEFAULT_SESSION_STORE_DIR): RuntimePaths {
   const workspaceDirAbs = resolveWorkspaceRoot(workspaceDir)
   const backendDir = path.join(workspaceDirAbs, 'backend')
-  const runtimeRootDir = path.join(workspaceDirAbs, '.ZxhClaw')
+  const runtimeRootDir = path.join(workspaceDirAbs, '.lecquy')
   const memoryDir = path.join(runtimeRootDir, 'memory')
   const artifactsDir = path.join(runtimeRootDir, 'artifacts')
   const artifactsDocsDir = path.join(artifactsDir, 'docs')
@@ -144,6 +150,7 @@ export function resolveRuntimePaths(workspaceDir?: string, sessionStoreDir = DEF
     legacyBackendMemoryDir: path.join(backendDir, '.memory'),
     legacyBackendMemoryFile: path.join(backendDir, '.memory', 'MEMORY.md'),
     legacyBackendDocsDir: path.join(backendDir, 'docs'),
-    legacyBackendRuntimeRootDir: path.join(backendDir, '.ZxhClaw'),
+    legacyRootRuntimeRootDirs: LEGACY_ROOT_RUNTIME_DIR_NAMES.map((dirName) => path.join(workspaceDirAbs, dirName)),
+    legacyBackendRuntimeRootDirs: LEGACY_BACKEND_RUNTIME_DIR_NAMES.map((dirName) => path.join(backendDir, dirName)),
   }
 }

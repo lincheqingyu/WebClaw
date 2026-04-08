@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronUp, Copy, ListTodo, RotateCcw, Sparkles } fr
 import { useEffect, useState, type FocusEvent, type ReactNode } from 'react'
 import type { ChatMessage } from '../../hooks/useChat'
 import { buildAttachmentPreviewUrl } from '../../lib/chat-attachments'
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import { ArtifactCard } from '../artifacts/ArtifactCard'
 import { ArtifactTrace } from '../artifacts/ArtifactTrace'
 import {

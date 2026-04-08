@@ -1,5 +1,5 @@
 import type { Env } from '../config/index.js'
-import type { SessionEntry } from '@webclaw/shared'
+import type { SessionEntry } from '@lecquy/shared'
 
 function getDailyBoundary(now: Date, atHour: number): number {
   const boundary = new Date(now)

@@ -11,8 +11,8 @@ import type {
   TodoProjection,
   WorkflowProjection,
   WorkflowStatus,
-} from '@webclaw/shared'
-import { extractSessionText } from '@webclaw/shared'
+} from '@lecquy/shared'
+import { extractSessionText } from '@lecquy/shared'
 import type { SessionManager } from './pi-session-core/session-manager.js'
 
 function normalizePreview(text: string): string | undefined {

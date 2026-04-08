@@ -4,7 +4,7 @@
  */
 
 import type { Model } from '@mariozechner/pi-ai'
-import type { ThinkingProtocol } from '@webclaw/shared'
+import type { ThinkingProtocol } from '@lecquy/shared'
 import { getConfig } from '../config/index.js'
 
 /** vLLM Model 创建参数 */

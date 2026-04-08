@@ -4,7 +4,7 @@
 
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import type { UserMessage, AssistantMessage } from '@mariozechner/pi-ai'
-import type { SessionId, SessionSnapshot, SerializedTodoItem } from '@webclaw/shared'
+import type { SessionId, SessionSnapshot, SerializedTodoItem } from '@lecquy/shared'
 import { createTodoManager, type TodoManager, type TodoItem } from '../core/todo/todo-manager.js'
 
 export type Mode = 'simple' | 'plan'

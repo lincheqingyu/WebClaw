@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname } from 'node:path'
 import { Type } from '@sinclair/typebox'
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core'
-import type { GeneratedFileArtifact } from '@webclaw/shared'
+import type { GeneratedFileArtifact } from '@lecquy/shared'
 import { TOOL_OUTPUT_LIMIT } from '../types.js'
 import {
   GENERATED_ARTIFACT_DOCS_DIR,
@@ -99,7 +99,7 @@ export function createWriteFileTool(): AgentTool<typeof parameters> {
   return {
     name: 'write_file',
     label: '写入文件',
-    description: '写入或创建文件内容（覆盖写入）。生成给用户查看的文档默认应写入 .ZxhClaw/artifacts/docs/。',
+    description: '写入或创建文件内容（覆盖写入）。生成给用户查看的文档默认应写入 .lecquy/artifacts/docs/。',
     parameters,
     execute: async (_toolCallId, params): Promise<AgentToolResult<Record<string, unknown>>> => {
       try {

@@ -1,4 +1,4 @@
-import type { ChatAttachment } from '@webclaw/shared'
+import type { ChatAttachment } from '@lecquy/shared'
 import { MessageList } from '../../components/chat/MessageList'
 import type { ChatMessage } from '../../hooks/useChat'
 import type { ChatArtifact } from '../../lib/artifacts'

@@ -15,4 +15,4 @@
 
 更完整的端口与资源约定见：
 
-- [`docs/frontend/network-and-public-assets.md`](../../docs/frontend/network-and-public-assets.md)
+- [`docs/frontend/20260408-10-前端网络与 Public 资源 技术规范.md`](../../docs/frontend/20260408-10-前端网络与 Public 资源 技术规范.md)

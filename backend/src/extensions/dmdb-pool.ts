@@ -36,7 +36,7 @@ export async function getDmPool(): Promise<unknown> {
 
   const db = await loadDmdb()
   if (!db) {
-    throw new Error('dmdb 包未安装，请运行: pnpm -F @webclaw/backend add dmdb')
+    throw new Error('dmdb 包未安装，请运行: pnpm -F @lecquy/backend add dmdb')
   }
 
   const config = getConfig()

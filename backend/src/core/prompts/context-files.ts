@@ -74,32 +74,32 @@ const WORKER_CONTEXT_FILE_ORDER = [
 
 const CONTEXT_FILE_META: Record<ContextFileName, { label: string; description: string; editable: boolean }> = {
   'SOUL.md': {
-    label: '.ZxhClaw/SOUL.md',
+    label: '.lecquy/SOUL.md',
     description: '定义助手气质、表达风格与长期语气。',
     editable: true,
   },
   'IDENTITY.md': {
-    label: '.ZxhClaw/IDENTITY.md',
+    label: '.lecquy/IDENTITY.md',
     description: '定义角色定位、能力边界与核心原则。',
     editable: true,
   },
   'USER.md': {
-    label: '.ZxhClaw/USER.md',
+    label: '.lecquy/USER.md',
     description: '记录用户背景、偏好、约定与长期目标。',
     editable: true,
   },
   'MEMORY.md': {
-    label: '.ZxhClaw/MEMORY.md',
+    label: '.lecquy/MEMORY.md',
     description: '记录长期记忆与可复用事实。',
     editable: true,
   },
   'AGENTS.md': {
-    label: '.ZxhClaw/AGENTS.md',
+    label: '.lecquy/AGENTS.md',
     description: '系统托管的运行规范、风险边界与协作规则。',
     editable: false,
   },
   'TOOLS.md': {
-    label: '.ZxhClaw/TOOLS.md',
+    label: '.lecquy/TOOLS.md',
     description: '系统托管的工具环境说明与使用约定。',
     editable: false,
   },
@@ -115,7 +115,7 @@ async function readTextIfExists(filePath: string): Promise<string> {
 
 function buildManagedAgentsContent(): string {
   return [
-    '# ZxhClaw Runtime AGENTS',
+    '# Lecquy Runtime AGENTS',
     '',
     '## 工作流规则',
     '- simple 模式直接完成用户请求；plan 模式先规划 todo，再串行执行，最后统一总结。',
@@ -135,7 +135,7 @@ function buildManagedAgentsContent(): string {
 
 function buildManagedToolsContent(paths: PromptContextPaths): string {
   return [
-    '# ZxhClaw Runtime TOOLS',
+    '# Lecquy Runtime TOOLS',
     '',
     '## 工作区',
     `- 项目根目录：${paths.workspaceDir}`,
@@ -149,10 +149,10 @@ function buildManagedToolsContent(paths: PromptContextPaths): string {
     '## 使用约定',
     '- 工具可用性以 system prompt 的 Tooling 章节为准，本文件只提供环境说明。',
     '- 会话协作优先使用 session tools；不要用 bash 伪造内部调用。',
-    '- 默认技能已随程序内置；部署后新增或覆盖技能时，把目录放到 `.ZxhClaw/skills/`。',
+    '- 默认技能已随程序内置；部署后新增或覆盖技能时，把目录放到 `.lecquy/skills/`。',
     '- 需要技能知识时，先根据技能描述选择，再用 skill 工具读取具体 SKILL.md。',
-    '- 生成交付给用户的文档、页面、报告、导出文件时，默认写入 `.ZxhClaw/artifacts/docs/`；只有用户明确指定位置时才写到其它目录。',
-    '- 只有 `.ZxhClaw/artifacts/docs/` 下的产物会被前端当成文件卡片展示；项目源码、配置和内部文档不要作为附件暴露给用户。',
+    '- 生成交付给用户的文档、页面、报告、导出文件时，默认写入 `.lecquy/artifacts/docs/`；只有用户明确指定位置时才写到其它目录。',
+    '- 只有 `.lecquy/artifacts/docs/` 下的产物会被前端当成文件卡片展示；项目源码、配置和内部文档不要作为附件暴露给用户。',
     '',
   ].join('\n')
 }

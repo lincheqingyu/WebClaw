@@ -17,7 +17,7 @@ import { syncRuntimeSession } from '../db/runtime-session-repository.js'
 import { extractEventMemoryItemsWithDiagnostics } from '../memory/extraction-runner.js'
 import { SessionManager } from '../runtime/pi-session-core/session-manager.js'
 import { createSessionProjectionBase, rebuildSessionProjection } from '../runtime/projections.js'
-import type { SessionRouteContext } from '@webclaw/shared'
+import type { SessionRouteContext } from '@lecquy/shared'
 
 interface CountRow {
   readonly count: string | number
@@ -42,7 +42,7 @@ function loadWorkspaceEnv(): void {
   process.env.PG_ENABLED = 'true'
   process.env.PG_HOST ??= '127.0.0.1'
   process.env.PG_PORT ??= '5432'
-  process.env.PG_DATABASE ??= 'webclaw'
+  process.env.PG_DATABASE ??= 'lecquy'
   process.env.PG_USER ??= 'postgres'
   process.env.PG_SSL ??= 'false'
 }
@@ -117,7 +117,7 @@ async function loadMemoryJob(pool: Pool, sessionId: string, triggerEventSeq: num
 async function main(): Promise<void> {
   loadWorkspaceEnv()
   const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-  const sessionDir = resolve(workspaceRoot, '.ZxhClaw/sessions/live-extraction-smoke')
+  const sessionDir = resolve(workspaceRoot, '.lecquy/sessions/live-extraction-smoke')
   await mkdir(sessionDir, { recursive: true })
 
   const config = loadConfig()

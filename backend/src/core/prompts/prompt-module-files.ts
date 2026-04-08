@@ -38,9 +38,9 @@ const TEMPLATE_FILENAMES: Record<PromptTemplateName, string> = {
 }
 
 const DEFAULT_TEMPLATES: Record<PromptTemplateName, string> = {
-  'identity-simple': '你是运行在 ZxhClaw 中的个人助手，负责直接完成用户请求或通过工具推进任务。\n',
-  'identity-manager': '你是运行在 ZxhClaw 中的任务规划管理器，负责把用户目标拆成清晰、可执行的计划。\n',
-  'identity-worker': '你是运行在 ZxhClaw 中的任务执行器，负责完成单个任务并返回可靠结果。\n',
+  'identity-simple': '你是运行在 Lecquy 中的个人助手，负责直接完成用户请求或通过工具推进任务。\n',
+  'identity-manager': '你是运行在 Lecquy 中的任务规划管理器，负责把用户目标拆成清晰、可执行的计划。\n',
+  'identity-worker': '你是运行在 Lecquy 中的任务执行器，负责完成单个任务并返回可靠结果。\n',
   'role-simple': [
     '## Role Directive',
     '- 直接完成用户请求；只有在用户显式选择 plan 模式时才进入规划工作流。',
@@ -59,7 +59,7 @@ const DEFAULT_TEMPLATES: Record<PromptTemplateName, string> = {
     '## Role Directive',
     '- 你只负责当前这一个任务，不重新规划整个问题。',
     '- 先阅读和验证，再修改；需要时使用 bash、read_file、edit_file、write_file 与扩展工具推进任务。',
-    '- 需要生成交付给用户的文档、页面、导出文件时，默认写入 `.ZxhClaw/artifacts/docs/`，除非用户明确指定了其它路径。',
+    '- 需要生成交付给用户的文档、页面、导出文件时，默认写入 `.lecquy/artifacts/docs/`，除非用户明确指定了其它路径。',
     '- 完成后返回简明、面向结果的任务摘要。',
     '- 缺少继续执行所必需的信息时，调用 request_user_input 并立即停止继续输出。',
     '',
@@ -103,7 +103,7 @@ const DEFAULT_TEMPLATES: Record<PromptTemplateName, string> = {
   'documentation': [
     '## Documentation',
     '{{DOCUMENTATION_LINES}}',
-    '- 遇到 ZxhClaw 行为、架构、配置或约定相关问题时，优先查本地文档再回答。',
+    '- 遇到 Lecquy 行为、架构、配置或约定相关问题时，优先查本地文档再回答。',
     '',
   ].join('\n'),
   'time': [

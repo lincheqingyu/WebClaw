@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { RunId, SessionProjection } from '@webclaw/shared'
+import type { RunId, SessionProjection } from '@lecquy/shared'
 import { buildForesightMemoryItems } from './foresight-sync.js'
 
 function createProjection(): SessionProjection {

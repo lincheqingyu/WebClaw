@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-WebClaw 后端服务，为前端 AI 对话客户端提供 Agent 驱动的对话能力。
+Lecquy 后端服务，为前端 AI 对话客户端提供 Agent 驱动的对话能力。
 
 **核心职责**：Agent 对话调度 · 工具调用 · 技能系统 · 流式响应
 
@@ -58,10 +58,10 @@ src/
 
 ## 文档导航
 
-- 后端架构决策分析：`../docs/backend/backend-architecture-analysis.md`
-- 后端接口文档：`../docs/backend/api-examples.md`
-- 会话联调文档：`../docs/backend/session-management-integration.md`
-- simple / plan 模式分析：`./simple-plan-modes-analysis.md`
+- 后端架构决策分析：`../docs/backend/20260408-6-后端架构分析 技术规范.md`
+- 后端接口文档：`../docs/backend/20260408-11-后端接口示例 技术规范.md`
+- 会话联调文档：`../docs/backend/20260408-12-会话管理联调 技术规范.md`
+- simple / plan 模式分析：`../docs/backend/20260408-13-Simple Plan 模式分析 技术规范.md`
 
 ## 开发规范
 
@@ -79,7 +79,7 @@ src/
 
 ### 依赖管理
 
-- 通过 pnpm workspace 管理：`pnpm -F @webclaw/backend add <包名>`
+- 通过 pnpm workspace 管理：`pnpm -F @lecquy/backend add <包名>`
 - 最小依赖原则，优先使用 Node.js 原生 API
 - 生产依赖与开发依赖严格分离
 

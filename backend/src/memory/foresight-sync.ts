@@ -1,4 +1,4 @@
-import type { RunId, SerializedTodoItem, SessionProjection } from '@webclaw/shared'
+import type { RunId, SerializedTodoItem, SessionProjection } from '@lecquy/shared'
 import { getPool } from '../db/client.js'
 import { upsertMemoryItems } from '../db/memory-repository.js'
 import { logger } from '../utils/logger.js'

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, FileText, LoaderCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { ArtifactTraceItem } from '@webclaw/shared'
+import type { ArtifactTraceItem } from '@lecquy/shared'
 import type { ChatArtifact } from '../../lib/artifacts'
 
 interface ArtifactTraceProps {

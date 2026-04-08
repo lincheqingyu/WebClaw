@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import type { SessionEntry, SessionSnapshot } from '@webclaw/shared'
+import type { SessionEntry, SessionSnapshot } from '@lecquy/shared'
 import type { SessionStoreShape } from './types.js'
 
 export class SessionStore {

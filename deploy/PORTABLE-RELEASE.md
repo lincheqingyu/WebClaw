@@ -1,15 +1,15 @@
-# WebClaw 便携发布说明
+# Lecquy 便携发布说明
 
 ## 目标形态
 
 发布包尽量收敛到最少外部文件：
 
 ```text
-webclaw/
-├── webclaw-server            # macOS / Linux 可执行文件
-├── webclaw-server.exe        # Windows 可执行文件
+lecquy/
+├── lecquy-server            # macOS / Linux 可执行文件
+├── lecquy-server.exe        # Windows 可执行文件
 ├── .env
-└── .ZxhClaw/
+└── .lecquy/
     ├── skills/
     ├── system-prompt/
     ├── sessions/v3/
@@ -21,8 +21,8 @@ webclaw/
 
 - 默认前端静态资源会被打进 `runtime-bundle`
 - 默认技能会被打进 `runtime-bundle`
-- `.ZxhClaw/skills/` 用于部署后继续新增或覆盖技能
-- `.ZxhClaw/system-prompt/` 用于覆写默认 prompt 模板
+- `.lecquy/skills/` 用于部署后继续新增或覆盖技能
+- `.lecquy/system-prompt/` 用于覆写默认 prompt 模板
 
 ## 当前仓库里的构建结果
 
@@ -47,9 +47,9 @@ pnpm build
 
 要适配你的三类部署环境，需要分别产出：
 
-- `webclaw-macos-arm64`
-- `webclaw-linux-arm64`
-- `webclaw-server.exe`
+- `lecquy-macos-arm64`
+- `lecquy-linux-arm64`
+- `lecquy-server.exe`
 
 如果未来还要兼容传统 `x64 Linux` 或 `Windows arm64`，也要分别再出对应产物。
 
@@ -79,7 +79,7 @@ pnpm build
 
 - 使用 Node SEA 为每个平台分别构建
 - 把 `runtime-bundle.json` 注入可执行文件
-- 外部只保留 `.env` 与 `.ZxhClaw/`
+- 外部只保留 `.env` 与 `.lecquy/`
 
 优点：
 
@@ -116,10 +116,10 @@ release/sea/
 
 1. 程序内置 bundle
 2. 仓库内 `backend/skills/`（开发期）
-3. 部署目录 `.ZxhClaw/skills/`（运行时覆盖）
+3. 部署目录 `.lecquy/skills/`（运行时覆盖）
 
 因此：
 
 - 开发默认技能时，继续放 `backend/skills/`
-- 发布后追加技能时，放 `.ZxhClaw/skills/`
-- 同名技能时，`.ZxhClaw/skills/` 会覆盖内置版本
+- 发布后追加技能时，放 `.lecquy/skills/`
+- 同名技能时，`.lecquy/skills/` 会覆盖内置版本

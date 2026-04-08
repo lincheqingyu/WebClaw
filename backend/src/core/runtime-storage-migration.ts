@@ -10,7 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import path from 'node:path'
-import type { GeneratedFileArtifact } from '@webclaw/shared'
+import type { GeneratedFileArtifact } from '@lecquy/shared'
 import { logger } from '../utils/logger.js'
 import {
   GENERATED_ARTIFACT_DOCS_DIR,
@@ -387,7 +387,7 @@ async function migrateLegacyDocs(paths: RuntimePaths): Promise<Map<string, strin
   }
 
   await rm(paths.legacyBackendDocsDir, { recursive: true, force: true })
-  logger.info('已迁移 backend/docs 到 .ZxhClaw/artifacts/docs/legacy', { fileCount: files.length })
+  logger.info('已迁移 backend/docs 到 .lecquy/artifacts/docs/legacy', { fileCount: files.length })
   return docsPathMap
 }
 
@@ -417,10 +417,19 @@ async function mergeDirectoryContents(sourceDir: string, targetDir: string): Pro
 }
 
 async function migrateLegacyRuntimeRoot(paths: RuntimePaths): Promise<void> {
-  if (!existsSync(paths.legacyBackendRuntimeRootDir)) return
-  const copiedCount = await mergeDirectoryContents(paths.legacyBackendRuntimeRootDir, paths.runtimeRootDir)
-  await rm(paths.legacyBackendRuntimeRootDir, { recursive: true, force: true })
-  logger.info('已迁移 backend/.ZxhClaw 到根 .ZxhClaw', { copiedCount })
+  for (const legacyRootDir of paths.legacyRootRuntimeRootDirs) {
+    if (!existsSync(legacyRootDir) || legacyRootDir === paths.runtimeRootDir) continue
+    const copiedCount = await mergeDirectoryContents(legacyRootDir, paths.runtimeRootDir)
+    await rm(legacyRootDir, { recursive: true, force: true })
+    logger.info('已迁移历史根运行时目录到 .lecquy', { sourceDir: legacyRootDir, copiedCount })
+  }
+
+  for (const legacyBackendDir of paths.legacyBackendRuntimeRootDirs) {
+    if (!existsSync(legacyBackendDir)) continue
+    const copiedCount = await mergeDirectoryContents(legacyBackendDir, paths.runtimeRootDir)
+    await rm(legacyBackendDir, { recursive: true, force: true })
+    logger.info('已迁移历史 backend 运行时目录到根 .lecquy', { sourceDir: legacyBackendDir, copiedCount })
+  }
 }
 
 async function migrateLegacyMemory(paths: RuntimePaths): Promise<void> {
@@ -428,7 +437,7 @@ async function migrateLegacyMemory(paths: RuntimePaths): Promise<void> {
   const currentMemory = await readFile(paths.memoryFile, 'utf8').catch(() => '')
   if (currentMemory.trim()) {
     await rm(paths.legacyBackendMemoryDir, { recursive: true, force: true })
-    logger.info('检测到根 .ZxhClaw/MEMORY.md 已存在，跳过 backend/.memory/MEMORY.md 导入')
+    logger.info('检测到根 .lecquy/MEMORY.md 已存在，跳过 backend/.memory/MEMORY.md 导入')
     return
   }
 
@@ -439,7 +448,7 @@ async function migrateLegacyMemory(paths: RuntimePaths): Promise<void> {
   }
 
   await rm(paths.legacyBackendMemoryDir, { recursive: true, force: true })
-  logger.info('已迁移 backend/.memory/MEMORY.md 到根 .ZxhClaw/MEMORY.md')
+  logger.info('已迁移 backend/.memory/MEMORY.md 到根 .lecquy/MEMORY.md')
 }
 
 async function discardLegacySessionStoreV2(paths: RuntimePaths): Promise<void> {

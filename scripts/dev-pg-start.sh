@@ -3,15 +3,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PG_HOME="${WEBCLAW_PG_HOME:-$ROOT_DIR/.ZxhClaw/dev-postgres}"
-DATA_DIR="${WEBCLAW_PG_DATA_DIR:-$PG_HOME/data}"
-LOG_DIR="${WEBCLAW_PG_LOG_DIR:-$PG_HOME/logs}"
-RUN_DIR="${WEBCLAW_PG_RUN_DIR:-$PG_HOME/run}"
-PORT="${WEBCLAW_PG_PORT:-5432}"
-HOST="${WEBCLAW_PG_HOST:-127.0.0.1}"
-DB_NAME="${WEBCLAW_PG_DATABASE:-webclaw}"
-DB_USER="${WEBCLAW_PG_USER:-postgres}"
-BIN_DIR="${WEBCLAW_PG_BIN_DIR:-/opt/homebrew/opt/postgresql@16/bin}"
+PG_HOME="${LECQUY_PG_HOME:-$ROOT_DIR/.lecquy/dev-postgres}"
+DATA_DIR="${LECQUY_PG_DATA_DIR:-$PG_HOME/data}"
+LOG_DIR="${LECQUY_PG_LOG_DIR:-$PG_HOME/logs}"
+RUN_DIR="${LECQUY_PG_RUN_DIR:-$PG_HOME/run}"
+PORT="${LECQUY_PG_PORT:-5432}"
+HOST="${LECQUY_PG_HOST:-127.0.0.1}"
+DB_NAME="${LECQUY_PG_DATABASE:-lecquy}"
+DB_USER="${LECQUY_PG_USER:-postgres}"
+BIN_DIR="${LECQUY_PG_BIN_DIR:-/opt/homebrew/opt/postgresql@16/bin}"
 INITDB_BIN="$BIN_DIR/initdb"
 PG_CTL_BIN="$BIN_DIR/pg_ctl"
 PSQL_BIN="$BIN_DIR/psql"
@@ -22,7 +22,7 @@ require_bin() {
   local bin_path="$1"
   if [[ ! -x "$bin_path" ]]; then
     echo "missing PostgreSQL binary: $bin_path" >&2
-    echo "tip: install postgresql@16 via Homebrew, or override WEBCLAW_PG_BIN_DIR" >&2
+    echo "tip: install postgresql@16 via Homebrew, or override LECQUY_PG_BIN_DIR" >&2
     exit 1
   fi
 }

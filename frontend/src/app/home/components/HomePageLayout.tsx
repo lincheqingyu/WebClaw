@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createDefaultThinkingConfig, type ChatAttachment } from '@webclaw/shared'
+import { createDefaultThinkingConfig, type ChatAttachment } from '@lecquy/shared'
 import { ConversationArea } from './ConversationArea'
 import { ChatsOverview } from './ChatsOverview'
 import { DocumentPanel } from './DocumentPanel'
@@ -31,10 +31,10 @@ import { getPeerId, resetPeerId, setPeerId } from '../../../lib/session'
 import type { ChatArtifact } from '../../../lib/artifacts'
 
 const STORAGE_KEYS = {
-  modelConfig: 'webclaw.modelConfig',
-  sidebarCollapsed: 'webclaw.sidebarCollapsed',
-  themeMode: 'webclaw.themeMode',
-  documentPanelWidth: 'webclaw.documentPanelWidth',
+  modelConfig: 'lecquy.modelConfig',
+  sidebarCollapsed: 'lecquy.sidebarCollapsed',
+  themeMode: 'lecquy.themeMode',
+  documentPanelWidth: 'lecquy.documentPanelWidth',
 }
 
 const COLLAPSED_SIDEBAR_WIDTH = 64

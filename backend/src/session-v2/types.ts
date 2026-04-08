@@ -1,7 +1,7 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import type { AssistantMessage, UserMessage } from '@mariozechner/pi-ai'
-import type { SessionChannel, SessionEntry, SessionKind, SessionRouteContext, SessionSnapshot } from '@webclaw/shared'
-import { createSessionId, type SessionId } from '@webclaw/shared'
+import type { SessionChannel, SessionEntry, SessionKind, SessionRouteContext, SessionSnapshot } from '@lecquy/shared'
+import { createSessionId, type SessionId } from '@lecquy/shared'
 import { createTodoManager, type TodoManager } from '../core/todo/todo-manager.js'
 
 export type Mode = 'simple' | 'plan'

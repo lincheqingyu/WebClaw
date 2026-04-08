@@ -13,16 +13,16 @@ release/
 .env.*.local
 
 # 会话数据
-.ZxhClaw/sessions/
-.ZxhClaw/dev-postgres/
+.lecquy/sessions/
+.lecquy/dev-postgres/
 .sessions-v2/
 .sessions-v3/
 backend/.memory/
 backend/.sessions-v2/
 backend/.sessions-v3/
-backend/.ZxhClaw/
-.ZxhClaw/artifacts/docs/*
-!.ZxhClaw/artifacts/docs/.gitkeep
+backend/.lecquy/
+.lecquy/artifacts/docs/*
+!.lecquy/artifacts/docs/.gitkeep
 
 # 编译中间文件（shared 包）
 shared/src/*.js

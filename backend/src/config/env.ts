@@ -50,7 +50,7 @@ const envSchema = z.object({
   /** Session 空闲重置分钟 */
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).default(120),
   /** Session 存储目录 */
-  SESSION_STORE_DIR: z.string().default('.ZxhClaw/sessions/v3'),
+  SESSION_STORE_DIR: z.string().default('.lecquy/sessions/v3'),
   /** 上下文修剪模式 */
   SESSION_PRUNING_MODE: z.enum(['off', 'cache-ttl']).default('cache-ttl'),
   /** 修剪 TTL */
@@ -71,7 +71,7 @@ const envSchema = z.object({
   /** PostgreSQL 端口 */
   PG_PORT: portSchema.default(5432),
   /** PostgreSQL 数据库名 */
-  PG_DATABASE: z.string().default('webclaw'),
+  PG_DATABASE: z.string().default('lecquy'),
   /** PostgreSQL 用户名 */
   PG_USER: z.string().default('postgres'),
   /** PostgreSQL 密码（可选） */

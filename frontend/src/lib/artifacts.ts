@@ -1,6 +1,6 @@
-import type { ArtifactTraceItem, GeneratedFileArtifact } from '@webclaw/shared'
+import type { ArtifactTraceItem, GeneratedFileArtifact } from '@lecquy/shared'
 
-const GENERATED_DOCS_DIR = '.ZxhClaw/artifacts/docs'
+const GENERATED_DOCS_DIR = '.lecquy/artifacts/docs'
 const DEFAULT_ARTIFACT_EXTENSIONS = new Set([
   'html',
   'htm',

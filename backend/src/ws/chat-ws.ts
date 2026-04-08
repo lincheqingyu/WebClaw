@@ -6,7 +6,7 @@
 import type http from 'node:http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { z } from 'zod'
-import type { ServerEventPayloadMap } from '@webclaw/shared'
+import type { ServerEventPayloadMap } from '@lecquy/shared'
 import type { SessionRuntimeService } from '../runtime/index.js'
 import { logger } from '../utils/logger.js'
 import { runCancelSchema, runResumeSchema, runStartSchema } from '../types/api.js'

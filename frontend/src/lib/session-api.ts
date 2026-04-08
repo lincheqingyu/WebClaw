@@ -1,5 +1,5 @@
 import { API_V1 } from '../config/api'
-import type { ArtifactDetail, SessionEventEntry, SessionMessageRecord, SessionProjection } from '@webclaw/shared'
+import type { ArtifactDetail, SessionEventEntry, SessionMessageRecord, SessionProjection } from '@lecquy/shared'
 
 interface ApiEnvelope<T> {
   success: boolean

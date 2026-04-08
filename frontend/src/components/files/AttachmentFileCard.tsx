@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { FileText } from 'lucide-react'
-import type { ChatFileAttachment } from '@webclaw/shared'
+import type { ChatFileAttachment } from '@lecquy/shared'
 
 interface AttachmentFileCardProps {
   attachment: ChatFileAttachment

@@ -1,4 +1,4 @@
-import { extractSessionText, type SessionEventEntry } from '@webclaw/shared'
+import { extractSessionText, type SessionEventEntry } from '@lecquy/shared'
 import { formatCompactSummary } from '../runtime/context/templates/compact-summary.template.js'
 import type { SessionManager } from '../runtime/pi-session-core/session-manager.js'
 

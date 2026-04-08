@@ -9,7 +9,7 @@ import {
   type RunId,
   type SerializedTodoItem,
   type SessionRouteContext,
-} from '@webclaw/shared'
+} from '@lecquy/shared'
 import { loadConfig } from '../config/index.js'
 import { closePool, getPool } from '../db/client.js'
 import {
@@ -52,7 +52,7 @@ function loadWorkspaceEnv(): void {
   process.env.PG_ENABLED = 'true'
   process.env.PG_HOST ??= '127.0.0.1'
   process.env.PG_PORT ??= '5432'
-  process.env.PG_DATABASE ??= 'webclaw'
+  process.env.PG_DATABASE ??= 'lecquy'
   process.env.PG_USER ??= 'postgres'
   process.env.PG_SSL ??= 'false'
   process.env.LLM_API_KEY ??= 'pg-smoke-key'
@@ -133,7 +133,7 @@ async function loadMemoryJob(pool: Pool, sessionId: string, triggerEventSeq: num
 async function main(): Promise<void> {
   loadWorkspaceEnv()
   const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-  const sessionDir = resolve(workspaceRoot, '.ZxhClaw/sessions/pg-smoke')
+  const sessionDir = resolve(workspaceRoot, '.lecquy/sessions/pg-smoke')
   await mkdir(sessionDir, { recursive: true })
 
   const config = loadConfig()

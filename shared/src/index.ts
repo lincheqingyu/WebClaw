@@ -1,5 +1,5 @@
 /**
- * @webclaw/shared — 前后端共享类型
+ * @lecquy/shared — 前后端共享类型
  */
 
 export type {

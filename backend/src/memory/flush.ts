@@ -1,5 +1,5 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import { extractSessionText } from '@webclaw/shared'
+import { extractSessionText } from '@lecquy/shared'
 import { getMemoryConfig } from '../core/memory/index.js'
 import { appendDailyMemoryEntry } from './store.js'
 import { logger } from '../utils/logger.js'
