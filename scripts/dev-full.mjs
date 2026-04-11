@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process'
 import { isLocalPostgresRunning, resolvePostgresDevConfig, resolveWorkspaceRoot, startLocalPostgres, stopLocalPostgres } from './lib/postgres-dev.mjs'
 
 const workspaceRoot = resolveWorkspaceRoot()
-const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
 process.env.PG_ENABLED ??= 'true'
 process.env.PG_HOST ??= '127.0.0.1'
@@ -29,11 +28,23 @@ if (pgWasRunning) {
 
 startLocalPostgres(pgConfig)
 
-const child = spawn(pnpmCommand, ['dev'], {
-  cwd: workspaceRoot,
-  env: process.env,
-  stdio: 'inherit',
-})
+function spawnDevProcess() {
+  if (process.platform === 'win32') {
+    return spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'pnpm dev'], {
+      cwd: workspaceRoot,
+      env: process.env,
+      stdio: 'inherit',
+    })
+  }
+
+  return spawn('pnpm', ['dev'], {
+    cwd: workspaceRoot,
+    env: process.env,
+    stdio: 'inherit',
+  })
+}
+
+const child = spawnDevProcess()
 
 let finalized = false
 
