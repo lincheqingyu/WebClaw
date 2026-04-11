@@ -23,6 +23,7 @@
 - 当前开发期原则：默认使用本机进程 + 本机 PostgreSQL 联调，不使用 Docker / Docker Compose 作为默认开发或部署路径
 - 本地 PG 环境入口：`pnpm pg:dev:start` / `pnpm pg:dev:stop` / `pnpm --filter @lecquy/backend run pg:smoke`
 - 一键联调入口：`pnpm dev:full`
+- Windows 首次启动：若本机未安装 PostgreSQL，启动器会自动下载本地运行时到 `.lecquy/pg/`
 - WS / LLM 验收入口：
   - `pnpm --filter @lecquy/backend run pg:ws-acceptance`
   - `pnpm --filter @lecquy/backend run pg:live-extraction`

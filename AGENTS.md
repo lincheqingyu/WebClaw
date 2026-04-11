@@ -183,6 +183,7 @@ pnpm build            # 全量构建
 
 - **开发期运行原则**：当前处于开发阶段，默认采用本机进程 + 本机 PostgreSQL 联调；不要把 Docker / Docker Compose 作为默认开发、验收或部署路径
 - **启动入口原则**：一键启动优先使用跨平台 Node 脚本；不要把 `bash` 作为顶层唯一入口
+- **PostgreSQL 运行时原则**：Windows 开发机若未安装 PostgreSQL，允许首次启动时自动下载本地运行时到 `.lecquy/pg/`；该目录属于本地依赖缓存，不提交仓库
 - **语言**：中文注释/对话，英文代码/配置
 - **样式**：Tailwind CSS 4
 - **不可变性**：ALWAYS 创建新对象，NEVER 直接修改

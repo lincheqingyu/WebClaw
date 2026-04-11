@@ -1,4 +1,4 @@
-import { getPostgresDevConfig, printLocalPostgresStatus, startLocalPostgres, stopLocalPostgres } from './lib/postgres-dev.mjs'
+import { printLocalPostgresStatus, resolvePostgresDevConfig, startLocalPostgres, stopLocalPostgres } from './lib/postgres-dev.mjs'
 
 const command = process.argv[2]
 
@@ -12,7 +12,7 @@ if (!command) {
 }
 
 try {
-  const config = getPostgresDevConfig()
+  const config = await resolvePostgresDevConfig({ bootstrapIfMissing: command === 'start' })
 
   if (command === 'start') {
     startLocalPostgres(config)

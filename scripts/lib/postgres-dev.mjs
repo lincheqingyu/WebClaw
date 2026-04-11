@@ -1,6 +1,9 @@
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -19,6 +22,12 @@ const FALLBACK_BIN_DIRS = {
     'C:\\Program Files\\PostgreSQL\\16\\bin',
     'C:\\Program Files\\PostgreSQL\\15\\bin',
   ],
+}
+
+const REQUIRED_POSTGRES_BINS = ['initdb', 'pg_ctl', 'psql', 'createdb']
+const WINDOWS_EMBEDDED_POSTGRES = {
+  version: '16.13',
+  build: '1',
 }
 
 function getBinaryNames(name) {
@@ -75,6 +84,10 @@ function buildFallbackBinaryPath(name) {
   return fallbackDir ? path.join(fallbackDir, fallbackName) : fallbackName
 }
 
+function escapePowerShellString(value) {
+  return value.replaceAll("'", "''")
+}
+
 function runBinary(binaryPath, args, { allowFailure = false, capture = false, env } = {}) {
   const result = spawnSync(binaryPath, args, {
     env: env ?? process.env,
@@ -89,6 +102,24 @@ function runBinary(binaryPath, args, { allowFailure = false, capture = false, en
   if (!allowFailure && result.status !== 0) {
     const stderr = result.stderr?.trim()
     throw new Error(stderr || `${path.basename(binaryPath)} exited with code ${result.status ?? 1}`)
+  }
+
+  return result
+}
+
+function runCommand(command, args, { allowFailure = false, capture = false } = {}) {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+  })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  if (!allowFailure && result.status !== 0) {
+    const stderr = result.stderr?.trim()
+    throw new Error(stderr || `${command} exited with code ${result.status ?? 1}`)
   }
 
   return result
@@ -120,10 +151,60 @@ export function resolveWorkspaceRoot() {
   return path.resolve(__dirname, '..', '..')
 }
 
-export function resolvePostgresBin(name) {
+function hasRequiredBinariesInDir(dirPath) {
+  return REQUIRED_POSTGRES_BINS.every((name) => Boolean(findBinaryInDir(dirPath, name)))
+}
+
+function getEmbeddedPostgresRuntime(workspaceRoot) {
+  const rootDir = process.env.LECQUY_PG_RUNTIME_DIR ?? path.join(workspaceRoot, '.lecquy', 'pg')
+  const version = process.env.LECQUY_PG_RUNTIME_VERSION?.trim() || WINDOWS_EMBEDDED_POSTGRES.version
+  const build = process.env.LECQUY_PG_RUNTIME_BUILD?.trim() || WINDOWS_EMBEDDED_POSTGRES.build
+  const tag = `${version}-${build}`
+  const archiveBaseName = `postgresql-${version}-${build}-windows-x64-binaries`
+  const installDir = path.join(rootDir, tag)
+
+  return {
+    rootDir,
+    version,
+    build,
+    tag,
+    archiveFileName: `${archiveBaseName}.zip`,
+    archivePath: path.join(rootDir, 'cache', `${archiveBaseName}.zip`),
+    tempArchivePath: path.join(rootDir, 'cache', `${archiveBaseName}.zip.tmp`),
+    installDir,
+    tempInstallDir: `${installDir}.tmp`,
+    downloadUrl: process.env.LECQUY_PG_RUNTIME_URL?.trim()
+      || `https://get.enterprisedb.com/postgresql/${archiveBaseName}.zip`,
+  }
+}
+
+function findEmbeddedPostgresBinDir(installDir) {
+  const candidates = [
+    path.join(installDir, 'pgsql', 'bin'),
+    path.join(installDir, 'bin'),
+  ]
+
+  return candidates.find((dirPath) => hasRequiredBinariesInDir(dirPath)) ?? null
+}
+
+function getEmbeddedPostgresBinDir(workspaceRoot) {
+  if (process.platform !== 'win32') {
+    return null
+  }
+
+  const runtime = getEmbeddedPostgresRuntime(workspaceRoot)
+  return findEmbeddedPostgresBinDir(runtime.installDir)
+}
+
+export function resolvePostgresBin(name, { workspaceRoot = resolveWorkspaceRoot() } = {}) {
   const customBinDir = process.env.LECQUY_PG_BIN_DIR
   if (customBinDir) {
     return findBinaryInDir(customBinDir, name) ?? path.join(customBinDir, getBinaryNames(name)[0] ?? name)
+  }
+
+  const embeddedBinDir = getEmbeddedPostgresBinDir(workspaceRoot)
+  if (embeddedBinDir) {
+    return findBinaryInDir(embeddedBinDir, name) ?? path.join(embeddedBinDir, getBinaryNames(name)[0] ?? name)
   }
 
   return findBinaryInPath(name)
@@ -133,6 +214,8 @@ export function resolvePostgresBin(name) {
 
 export function getPostgresDevConfig({ workspaceRoot = resolveWorkspaceRoot() } = {}) {
   const pgHome = process.env.LECQUY_PG_HOME ?? path.join(workspaceRoot, '.lecquy', 'dev-postgres')
+  const embeddedRuntime = getEmbeddedPostgresRuntime(workspaceRoot)
+  const embeddedBinDir = getEmbeddedPostgresBinDir(workspaceRoot)
 
   return {
     workspaceRoot,
@@ -146,11 +229,110 @@ export function getPostgresDevConfig({ workspaceRoot = resolveWorkspaceRoot() } 
     logDir: process.env.LECQUY_PG_LOG_DIR ?? path.join(pgHome, 'logs'),
     runDir: process.env.LECQUY_PG_RUN_DIR ?? path.join(pgHome, 'run'),
     logFile: process.env.LECQUY_PG_LOG_FILE ?? path.join(pgHome, 'logs', 'postgres.log'),
-    initdbBin: resolvePostgresBin('initdb'),
-    pgCtlBin: resolvePostgresBin('pg_ctl'),
-    psqlBin: resolvePostgresBin('psql'),
-    createdbBin: resolvePostgresBin('createdb'),
+    embeddedRuntime,
+    embeddedBinDir,
+    initdbBin: resolvePostgresBin('initdb', { workspaceRoot }),
+    pgCtlBin: resolvePostgresBin('pg_ctl', { workspaceRoot }),
+    psqlBin: resolvePostgresBin('psql', { workspaceRoot }),
+    createdbBin: resolvePostgresBin('createdb', { workspaceRoot }),
   }
+}
+
+function hasRequiredBinaries(config) {
+  return [
+    config.initdbBin,
+    config.pgCtlBin,
+    config.psqlBin,
+    config.createdbBin,
+  ].every((binaryPath) => isExecutableFile(binaryPath))
+}
+
+async function downloadFile(url, destinationPath) {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`failed to download PostgreSQL runtime: ${response.status} ${response.statusText}`)
+  }
+
+  await fsp.mkdir(path.dirname(destinationPath), { recursive: true })
+
+  if (!response.body) {
+    await fsp.writeFile(destinationPath, Buffer.from(await response.arrayBuffer()))
+    return
+  }
+
+  await pipeline(
+    Readable.fromWeb(response.body),
+    fs.createWriteStream(destinationPath),
+  )
+}
+
+function extractWindowsZip(archivePath, destinationPath) {
+  const command = `Expand-Archive -LiteralPath '${escapePowerShellString(archivePath)}' -DestinationPath '${escapePowerShellString(destinationPath)}' -Force`
+  runCommand('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command])
+}
+
+function shouldAutoBootstrapEmbeddedPostgres(config) {
+  return process.platform === 'win32'
+    && process.arch === 'x64'
+    && !process.env.LECQUY_PG_BIN_DIR
+}
+
+async function bootstrapEmbeddedPostgres(config) {
+  if (!shouldAutoBootstrapEmbeddedPostgres(config)) {
+    return config
+  }
+
+  const runtime = config.embeddedRuntime
+  const existingBinDir = findEmbeddedPostgresBinDir(runtime.installDir)
+  if (existingBinDir) {
+    process.env.LECQUY_PG_BIN_DIR = existingBinDir
+    return getPostgresDevConfig({ workspaceRoot: config.workspaceRoot })
+  }
+
+  console.log(`PostgreSQL binaries not found, bootstrapping local runtime into ${path.relative(config.workspaceRoot, runtime.rootDir)}`)
+
+  await fsp.mkdir(path.dirname(runtime.archivePath), { recursive: true })
+  await fsp.mkdir(runtime.rootDir, { recursive: true })
+
+  if (!fs.existsSync(runtime.archivePath)) {
+    console.log(`downloading PostgreSQL runtime from ${runtime.downloadUrl}`)
+    await fsp.rm(runtime.tempArchivePath, { force: true })
+    await downloadFile(runtime.downloadUrl, runtime.tempArchivePath)
+    await fsp.rename(runtime.tempArchivePath, runtime.archivePath)
+  } else {
+    console.log(`reusing cached PostgreSQL runtime archive ${path.relative(config.workspaceRoot, runtime.archivePath)}`)
+  }
+
+  await fsp.rm(runtime.tempInstallDir, { recursive: true, force: true })
+  await fsp.mkdir(runtime.tempInstallDir, { recursive: true })
+  extractWindowsZip(runtime.archivePath, runtime.tempInstallDir)
+
+  const extractedBinDir = findEmbeddedPostgresBinDir(runtime.tempInstallDir)
+  if (!extractedBinDir) {
+    throw new Error(`downloaded PostgreSQL runtime is missing required binaries under ${runtime.tempInstallDir}`)
+  }
+
+  await fsp.rm(runtime.installDir, { recursive: true, force: true })
+  await fsp.rename(runtime.tempInstallDir, runtime.installDir)
+
+  const finalBinDir = findEmbeddedPostgresBinDir(runtime.installDir)
+  if (!finalBinDir) {
+    throw new Error(`bootstrapped PostgreSQL runtime is missing required binaries under ${runtime.installDir}`)
+  }
+
+  process.env.LECQUY_PG_BIN_DIR = finalBinDir
+  return getPostgresDevConfig({ workspaceRoot: config.workspaceRoot })
+}
+
+export async function resolvePostgresDevConfig({ workspaceRoot = resolveWorkspaceRoot(), bootstrapIfMissing = false } = {}) {
+  let config = getPostgresDevConfig({ workspaceRoot })
+
+  if (hasRequiredBinaries(config) || !bootstrapIfMissing) {
+    return config
+  }
+
+  config = await bootstrapEmbeddedPostgres(config)
+  return config
 }
 
 export function isLocalPostgresRunning(config) {

@@ -14,6 +14,7 @@ release/
 
 # 会话数据
 .lecquy/sessions/
+.lecquy/pg/
 .lecquy/dev-postgres/
 .sessions-v2/
 .sessions-v3/

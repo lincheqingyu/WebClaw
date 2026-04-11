@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { getPostgresDevConfig, isLocalPostgresRunning, resolveWorkspaceRoot, startLocalPostgres, stopLocalPostgres } from './lib/postgres-dev.mjs'
+import { isLocalPostgresRunning, resolvePostgresDevConfig, resolveWorkspaceRoot, startLocalPostgres, stopLocalPostgres } from './lib/postgres-dev.mjs'
 
 const workspaceRoot = resolveWorkspaceRoot()
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
@@ -18,7 +18,7 @@ process.env.LECQUY_PG_DATABASE ??= process.env.PG_DATABASE
 process.env.LECQUY_PG_USER ??= process.env.PG_USER
 process.env.LECQUY_PG_PASSWORD ??= process.env.PG_PASSWORD
 
-const pgConfig = getPostgresDevConfig({ workspaceRoot })
+const pgConfig = await resolvePostgresDevConfig({ workspaceRoot, bootstrapIfMissing: true })
 const pgWasRunning = isLocalPostgresRunning(pgConfig)
 
 if (pgWasRunning) {
