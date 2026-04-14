@@ -10,7 +10,7 @@ function FallbackCodeView({ code }: { code: string }) {
   const lines = code.split('\n')
 
   return (
-    <div className="artifact-code-with-lines min-h-full overflow-x-auto bg-surface text-[13px] leading-7 text-text-primary">
+    <div className="artifact-code-with-lines min-h-full overflow-x-hidden bg-surface text-[12px] text-text-primary">
       <pre className="min-h-full bg-transparent px-0 py-0">
         <code>
           {lines.map((line, index) => (
@@ -72,7 +72,7 @@ export function ShikiCodeView({ code, language }: ShikiCodeViewProps) {
 
   return (
     <div
-      className="artifact-code-with-lines min-h-full overflow-x-auto bg-surface text-[13px] leading-7 [&_.shiki]:!bg-transparent [&_.shiki]:m-0 [&_.shiki]:min-w-full [&_.shiki]:px-0 [&_.shiki]:py-0 [&_.shiki]:text-[13px] [&_.shiki]:leading-7 [&_.shiki_code]:block [&_.shiki_code]:min-w-full"
+      className="artifact-code-with-lines min-h-full overflow-x-hidden bg-surface text-[12px] [&_.shiki]:!bg-transparent [&_.shiki]:m-0 [&_.shiki]:w-full [&_.shiki]:min-w-0 [&_.shiki]:px-0 [&_.shiki]:py-0 [&_.shiki]:text-[12px] [&_.shiki_code]:block [&_.shiki_code]:min-w-0"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

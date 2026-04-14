@@ -24,10 +24,6 @@ function formatAttachmentMeta(attachment: ChatFileAttachment): string {
   else if (mime.includes('json')) typeLabel = 'JSON'
   else if (mime.startsWith('text/')) typeLabel = '文本'
 
-  if (attachment.truncated) {
-    return sizeLabel ? `${typeLabel} · ${sizeLabel} · 已截断` : `${typeLabel} · 已截断`
-  }
-
   return sizeLabel ? `${typeLabel} · ${sizeLabel}` : typeLabel
 }
 

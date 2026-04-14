@@ -1,9 +1,14 @@
 import clsx from 'clsx'
-import { ArrowLeft, Image as ImageIcon, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Image as ImageIcon } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatAttachment } from '@lecquy/shared'
-import { buildAttachmentPreviewUrl } from '../../../lib/chat-attachments'
+import { buildAttachmentPreviewUrl, getAttachmentDisplayText } from '../../../lib/chat-attachments'
 import { renderMarkdown } from '../../../components/chat/MessageItem'
+import { formatBytes, inferCodeLanguage, inferFileExtension, stripFileExtension } from '../../../lib/file-display'
+import { ShikiCodeView } from '../../../components/artifacts/ShikiCodeView'
+import { FilePreviewPanelHeader, type FilePreviewActionItem, type FilePreviewViewMode } from '../../../components/files/FilePreviewPanelHeader'
+import { HtmlPreviewFrame } from '../../../components/files/HtmlPreviewFrame'
+import { downloadTextContent, openPrintWindow } from '../../../lib/file-preview-actions'
 
 interface OpenDocument {
   key: string
@@ -22,32 +27,52 @@ interface SectionBlock {
   content: string
 }
 
-function formatBytes(size?: number): string {
-  if (!size) return 'Unknown size'
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size >= 10 * 1024 ? 0 : 1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
+const CODE_EXTENSIONS = new Set([
+  'cjs',
+  'css',
+  'go',
+  'java',
+  'js',
+  'json',
+  'jsx',
+  'mjs',
+  'py',
+  'rs',
+  'scss',
+  'sh',
+  'sql',
+  'ts',
+  'tsx',
+  'xml',
+  'yaml',
+  'yml',
+])
 
-function inferAttachmentExtension(name: string): string {
-  const parts = name.toLowerCase().split('.')
-  return parts.length > 1 ? parts.at(-1) ?? '' : ''
-}
-
-function inferDocumentType(attachment: ChatAttachment): 'image' | 'pdf' | 'docx' | 'excel' | 'markdown' | 'text' {
+function inferDocumentType(attachment: ChatAttachment): 'image' | 'pdf' | 'docx' | 'excel' | 'markdown' | 'html' | 'code' | 'text' {
   if (attachment.kind === 'image') return 'image'
 
   const mime = attachment.mimeType.toLowerCase()
-  const extension = inferAttachmentExtension(attachment.name)
+  const extension = inferFileExtension(attachment.name)
 
+  if (mime.includes('html') || extension === 'html' || extension === 'htm') return 'html'
   if (mime.includes('markdown') || extension === 'md' || extension === 'markdown') return 'markdown'
   if (mime.includes('pdf')) return 'pdf'
   if (mime.includes('wordprocessingml') || extension === 'docx') return 'docx'
   if (mime.includes('spreadsheetml') || mime.includes('ms-excel') || extension === 'xlsx' || extension === 'xls' || extension === 'csv') return 'excel'
+  if (
+    CODE_EXTENSIONS.has(extension)
+    || mime.includes('javascript')
+    || mime.includes('typescript')
+    || mime.includes('json')
+    || mime.includes('xml')
+    || mime.includes('yaml')
+  ) {
+    return 'code'
+  }
   return 'text'
 }
 
-function documentTypeLabel(type: ReturnType<typeof inferDocumentType>): string {
+function documentTypeLabel(attachment: ChatAttachment, type: ReturnType<typeof inferDocumentType>): string {
   switch (type) {
     case 'image':
       return 'Image'
@@ -59,6 +84,12 @@ function documentTypeLabel(type: ReturnType<typeof inferDocumentType>): string {
       return 'Excel'
     case 'markdown':
       return 'Markdown'
+    case 'html':
+      return 'HTML'
+    case 'code': {
+      const extension = inferFileExtension(attachment.name)
+      return extension ? extension.toUpperCase() : 'Code'
+    }
     default:
       return 'Text'
   }
@@ -99,7 +130,7 @@ function parseDocumentSections(attachment: ChatAttachment): SectionBlock[] {
   if (attachment.kind === 'image') return []
 
   const type = inferDocumentType(attachment)
-  const text = attachment.text.trim()
+  const text = getAttachmentDisplayText(attachment).trim()
 
   if (type === 'pdf') {
     const pages = parseTaggedSections(text, 'page', (attrs, index) => `Page ${attrs.number ?? index + 1}`)
@@ -150,55 +181,86 @@ export function DocumentPanel({ document, width, onClose }: DocumentPanelProps) 
   const documentType = inferDocumentType(attachment)
   const sections = useMemo(() => parseDocumentSections(attachment), [attachment])
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
+  const [viewMode, setViewMode] = useState<FilePreviewViewMode>('preview')
+  const [copied, setCopied] = useState(false)
+  const [previewRevision, setPreviewRevision] = useState(0)
+  const previewRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setActiveSectionId(sections[0]?.id ?? null)
   }, [sections])
 
+  useEffect(() => {
+    setViewMode('preview')
+    setCopied(false)
+    setPreviewRevision(0)
+  }, [document.key])
+
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0] ?? null
   const imageUrl = attachment.kind === 'image' ? buildAttachmentPreviewUrl(attachment) : null
+  const displayText = attachment.kind === 'file' ? getAttachmentDisplayText(attachment) : ''
+  const supportsSourceView = attachment.kind === 'file'
+
+  const copyRawContent = async () => {
+    if (attachment.kind !== 'file' || !displayText) return
+    try {
+      await navigator.clipboard.writeText(displayText)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  const handleDownload = () => {
+    if (attachment.kind !== 'file') return
+    downloadTextContent(displayText, attachment.name, attachment.mimeType)
+  }
+
+  const handleExportPdf = () => {
+    if (attachment.kind !== 'file') return
+    if (documentType === 'html') {
+      openPrintWindow(attachment.name, displayText)
+      return
+    }
+    const previewHtml = previewRef.current?.innerHTML
+    if (!previewHtml) return
+    openPrintWindow(attachment.name, previewHtml)
+  }
+
+  const actionItems: FilePreviewActionItem[] = attachment.kind === 'file'
+    ? [
+      { label: 'Download', onSelect: handleDownload, disabled: !displayText },
+      { label: 'Download as PDF', onSelect: handleExportPdf, disabled: !displayText },
+    ]
+    : []
 
   return (
     <aside
       className="flex h-full min-h-0 min-w-[22rem] shrink-0 flex-col overflow-hidden border-l border-border/70 bg-surface"
       style={{ width }}
     >
-      <div className="flex shrink-0 items-start gap-2 border-b border-border/70 bg-surface px-5 py-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex size-9 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-          aria-label="关闭文档面板"
-        >
-          <ArrowLeft className="size-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[1.5rem] font-semibold leading-tight text-text-primary">
-            {attachment.name}
-          </div>
-          <div className="mt-1 text-xs text-text-secondary">
-            {formatBytes(attachment.size)} · {documentTypeLabel(documentType)}
-            {attachment.kind === 'file' && attachment.truncated ? ' · 内容已截断' : ''}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex size-9 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
-          aria-label="关闭文档"
-        >
-          <X className="size-5" />
-        </button>
-      </div>
+      <FilePreviewPanelHeader
+        title={attachment.kind === 'file'
+          ? `${stripFileExtension(attachment.name)} · ${formatBytes(attachment.size)} · ${documentTypeLabel(attachment, documentType)}`
+          : attachment.name}
+        viewMode={supportsSourceView ? viewMode : undefined}
+        onViewModeChange={supportsSourceView ? setViewMode : undefined}
+        onCopy={attachment.kind === 'file' && displayText ? copyRawContent : undefined}
+        copied={copied}
+        actionItems={actionItems}
+        onRefresh={documentType === 'html' ? () => setPreviewRevision((value) => value + 1) : undefined}
+        onClose={onClose}
+      />
 
       <div className="min-h-0 flex-1 overflow-hidden bg-surface">
         {attachment.kind === 'image' ? (
-          <div className="flex h-full min-h-0 items-center justify-center overflow-auto bg-surface px-6 py-6">
+          <div className="flex h-full min-h-0 items-center justify-center overflow-auto bg-surface px-5 py-4">
             {imageUrl ? (
               <img
                 src={imageUrl}
                 alt={attachment.name}
-                className="max-h-[calc(100vh-12rem)] max-w-full rounded-[1rem] object-contain shadow-[0_18px_38px_rgba(15,23,42,0.12)]"
+                className="max-h-[calc(100vh-9rem)] max-w-full object-contain shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
               />
             ) : (
               <div className="flex h-64 w-64 items-center justify-center rounded-[1rem] border border-dashed border-border/80 bg-surface text-text-secondary">
@@ -208,9 +270,9 @@ export function DocumentPanel({ document, width, onClose }: DocumentPanelProps) 
           </div>
         ) : (
           <div className="flex h-full min-h-0 overflow-hidden bg-surface">
-            {documentType === 'excel' && sections.length > 1 && (
-              <div className="w-44 shrink-0 border-r border-border/70 bg-surface p-3">
-                <div className="mb-3 px-2 text-xs font-medium uppercase tracking-[0.14em] text-text-muted">Sheets</div>
+            {viewMode === 'preview' && documentType === 'excel' && sections.length > 1 && (
+              <div className="w-40 shrink-0 border-r border-border/70 bg-surface px-3 py-3">
+                <div className="mb-3 px-2 text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted">Sheets</div>
                 <div className="space-y-1">
                   {sections.map((section) => (
                     <button
@@ -218,9 +280,9 @@ export function DocumentPanel({ document, width, onClose }: DocumentPanelProps) 
                       type="button"
                       onClick={() => setActiveSectionId(section.id)}
                       className={clsx(
-                        'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors',
+                        'w-full rounded-xl px-3 py-2 text-left text-[13px] transition-colors',
                         activeSectionId === section.id
-                          ? 'border border-border/70 bg-surface-alt text-text-primary'
+                          ? 'bg-surface-alt text-text-primary'
                           : 'text-text-secondary hover:bg-hover hover:text-text-primary',
                       )}
                     >
@@ -231,29 +293,39 @@ export function DocumentPanel({ document, width, onClose }: DocumentPanelProps) 
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-hidden bg-surface">
-              <div className="h-full overflow-y-auto px-6 py-5">
-                <div className="mx-auto max-w-4xl">
-                {documentType === 'excel' ? (
-                  <>
-                    {activeSection && (
-                      <>
-                        <div className="overflow-x-auto rounded-2xl border border-border/70 bg-surface px-4 py-3">
-                          {renderTextParagraphs(activeSection.content, true)}
-                        </div>
-                      </>
-                    )}
-                  </>
+            <div ref={previewRef} className="min-h-0 flex-1 overflow-hidden bg-surface">
+              <div className="h-full overflow-y-auto">
+                {viewMode === 'source' ? (
+                  <ShikiCodeView code={activeSection?.content ?? displayText} language={inferCodeLanguage(attachment.name)} />
+                ) : documentType === 'code' ? (
+                  <ShikiCodeView code={activeSection?.content ?? displayText} language={inferCodeLanguage(attachment.name)} />
+                ) : documentType === 'html' ? (
+                  <HtmlPreviewFrame title={attachment.name} html={displayText} resetKey={previewRevision} className="h-full min-h-0" />
+                ) : documentType === 'excel' ? (
+                  <div className="px-5 py-4">
+                    <div className="mx-auto max-w-4xl">
+                      {activeSection && renderTextParagraphs(activeSection.content, true)}
+                    </div>
+                  </div>
                 ) : documentType === 'markdown' ? (
-                  renderMarkdown(activeSection?.content ?? attachment.text)
-                ) : activeSection || (attachment.kind === 'file' && attachment.text.trim().length > 0) ? (
-                  renderTextParagraphs(activeSection?.content ?? attachment.text, false)
+                  <div className="px-5 py-4">
+                    <div className="mx-auto max-w-4xl">
+                      {renderMarkdown(activeSection?.content ?? displayText)}
+                    </div>
+                  </div>
+                ) : activeSection || (attachment.kind === 'file' && displayText.trim().length > 0) ? (
+                  <div className="px-5 py-4">
+                    <div className="mx-auto max-w-4xl">
+                      {renderTextParagraphs(activeSection?.content ?? displayText, false)}
+                    </div>
+                  </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-surface px-4 py-5 text-sm text-text-secondary">
-                    当前未能从该文档中提取可展示内容。请重新上传，或换用更容易解析的格式。
+                  <div className="px-5 py-4">
+                    <div className="mx-auto max-w-4xl rounded-2xl border border-dashed border-border/70 px-4 py-5 text-sm text-text-secondary">
+                      当前未能从该文档中提取可展示内容。请重新上传，或换用更容易解析的格式。
+                    </div>
                   </div>
                 )}
-                </div>
               </div>
             </div>
           </div>

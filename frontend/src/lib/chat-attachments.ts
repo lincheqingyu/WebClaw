@@ -4,7 +4,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import * as pdfjsLib from 'pdfjs-dist'
 import * as XLSX from 'xlsx'
 
-const MAX_TEXT_FILE_CHARS = 20_000
+export const MODEL_ATTACHMENT_TEXT_CHAR_LIMIT = 20_000
 const TEXT_EXTENSIONS = new Set([
   'txt',
   'md',
@@ -54,11 +54,33 @@ function isTextLikeFile(file: File): boolean {
   return TEXT_EXTENSIONS.has(getExtension(file.name))
 }
 
-function truncateText(text: string): { text: string; truncated: boolean } {
-  const normalized = text.replace(/\r\n/g, '\n').trim()
+function normalizeAttachmentText(text: string): string {
+  return text.replace(/\r\n/g, '\n').trim()
+}
+
+function truncateText(text: string, maxChars: number): { text: string; truncated: boolean } {
   return {
-    text: normalized.length > MAX_TEXT_FILE_CHARS ? normalized.slice(0, MAX_TEXT_FILE_CHARS) : normalized,
-    truncated: normalized.length > MAX_TEXT_FILE_CHARS,
+    text: text.length > maxChars ? text.slice(0, maxChars) : text,
+    truncated: text.length > maxChars,
+  }
+}
+
+function createTextAttachment(
+  file: File,
+  text: string,
+  mimeType: string,
+): ChatAttachment {
+  const normalized = normalizeAttachmentText(text)
+  const { text: modelText, truncated } = truncateText(normalized, MODEL_ATTACHMENT_TEXT_CHAR_LIMIT)
+
+  return {
+    kind: 'file',
+    name: file.name,
+    mimeType,
+    text: modelText,
+    displayText: normalized !== modelText ? normalized : undefined,
+    size: file.size,
+    truncated,
   }
 }
 
@@ -86,6 +108,11 @@ export function buildAttachmentPreviewUrl(attachment: ChatAttachment): string | 
   return `data:${attachment.mimeType};base64,${attachment.data}`
 }
 
+export function getAttachmentDisplayText(attachment: ChatAttachment): string {
+  if (attachment.kind !== 'file') return ''
+  return attachment.displayText ?? attachment.text
+}
+
 async function readPdfAttachment(file: File): Promise<ChatAttachment> {
   const arrayBuffer = await file.arrayBuffer()
   let pdf: PDFDocumentProxy | null = null
@@ -105,15 +132,7 @@ async function readPdfAttachment(file: File): Promise<ChatAttachment> {
     }
     extractedText += '\n</pdf>'
 
-    const { text, truncated } = truncateText(extractedText)
-    return {
-      kind: 'file',
-      name: file.name,
-      mimeType: file.type || 'application/pdf',
-      text,
-      size: file.size,
-      truncated,
-    }
+    return createTextAttachment(file, extractedText, file.type || 'application/pdf')
   } catch {
     throw new Error(`PDF 解析失败：${file.name}`)
   } finally {
@@ -194,15 +213,11 @@ async function readDocxAttachment(file: File): Promise<ChatAttachment> {
 
     extractedText += '\n</page>\n</docx>'
 
-    const { text, truncated } = truncateText(extractedText)
-    return {
-      kind: 'file',
-      name: file.name,
-      mimeType: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      text,
-      size: file.size,
-      truncated,
-    }
+    return createTextAttachment(
+      file,
+      extractedText,
+      file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
   } catch {
     throw new Error(`DOCX 解析失败：${file.name}`)
   }
@@ -222,15 +237,11 @@ async function readExcelAttachment(file: File): Promise<ChatAttachment> {
 
     extractedText += '\n</excel>'
 
-    const { text, truncated } = truncateText(extractedText)
-    return {
-      kind: 'file',
-      name: file.name,
-      mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      text,
-      size: file.size,
-      truncated,
-    }
+    return createTextAttachment(
+      file,
+      extractedText,
+      file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
   } catch {
     throw new Error(`Excel 解析失败：${file.name}`)
   }
@@ -280,13 +291,5 @@ export async function readChatAttachment(file: File): Promise<ChatAttachment> {
   }
 
   const text = await file.text()
-  const { text: truncatedText, truncated } = truncateText(text)
-  return {
-    kind: 'file',
-    name: file.name,
-    mimeType: file.type || 'text/plain',
-    text: truncatedText,
-    size: file.size,
-    truncated,
-  }
+  return createTextAttachment(file, text, file.type || 'text/plain')
 }

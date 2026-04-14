@@ -12,6 +12,12 @@ export function inferFileExtension(name: string): string {
   return parts.length > 1 ? parts.at(-1) ?? '' : ''
 }
 
+export function stripFileExtension(name: string): string {
+  const extension = inferFileExtension(name)
+  if (!extension) return name
+  return name.slice(0, -(extension.length + 1))
+}
+
 export function inferArtifactTypeLabel(artifact: Pick<GeneratedFileArtifact, 'name' | 'mimeType'>): string {
   const extension = inferFileExtension(artifact.name)
   const mime = artifact.mimeType.toLowerCase()

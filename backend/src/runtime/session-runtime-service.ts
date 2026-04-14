@@ -367,6 +367,7 @@ function createUserContent(input: string, attachments: ChatAttachment[] = []): S
       name: attachment.name,
       mimeType: attachment.mimeType,
       text: attachment.text,
+      displayText: attachment.displayText,
       size: attachment.size,
       truncated: attachment.truncated,
     })

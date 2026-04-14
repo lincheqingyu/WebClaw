@@ -180,7 +180,6 @@ export function ChatInput({
                           <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
                           <div className="mt-0.5 text-xs text-text-secondary">
                             {(attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : '文本文件')}
-                            {attachment.truncated ? ' · 已截断' : ''}
                           </div>
                         </div>
                         <button

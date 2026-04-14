@@ -69,6 +69,7 @@ const attachmentSchema = z.discriminatedUnion('kind', [
     name: z.string().min(1),
     mimeType: z.string().min(1),
     text: z.string(),
+    displayText: z.string().optional(),
     size: z.number().int().nonnegative().optional(),
     truncated: z.boolean().optional(),
   }),
