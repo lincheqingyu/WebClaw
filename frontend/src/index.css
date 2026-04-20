@@ -542,11 +542,19 @@ input[type="number"] {
     background: transparent !important; /* 强制去掉 shiki 注入的 pre 内联底色，继承外层代码块底色 */
     font-size: inherit;
     line-height: 1.65;
+    white-space: pre;
 }
 
 .streamdown-markdown [data-streamdown="code-block-body"] code {
+    display: block;
     font-size: inherit;
     line-height: inherit;
+    white-space: pre;
+}
+
+.streamdown-markdown [data-streamdown="code-block-body"] .line {
+    display: block;
+    white-space: pre;
 }
 
 /* 关闭 streamdown 内置的行号：shiki 会在每行 span 上挂
