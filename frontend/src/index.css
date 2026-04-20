@@ -536,25 +536,41 @@ input[type="number"] {
     font-size: 0.95rem;
 }
 
+/* ================= 修复代码块换行与空行丢失 ================= */
+
 .streamdown-markdown [data-streamdown="code-block-body"] pre {
     margin: 0;
     padding: 0;
-    background: transparent !important; /* 强制去掉 shiki 注入的 pre 内联底色，继承外层代码块底色 */
+    background: transparent !important;
     font-size: inherit;
     line-height: 1.65;
-    white-space: pre;
+    /* 允许自动换行 */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .streamdown-markdown [data-streamdown="code-block-body"] code {
     display: block;
     font-size: inherit;
     line-height: inherit;
-    white-space: pre;
+    /* 允许自动换行 */
+    white-space: pre-wrap; 
 }
 
 .streamdown-markdown [data-streamdown="code-block-body"] .line {
     display: block;
-    white-space: pre;
+    /* 允许自动换行，遇到超长字符（如 URL）才强制折断 */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    /* 给每一行设置最小高度，防止极端情况的坍塌 */
+    min-height: 1.65em; 
+}
+
+/* 核心修复：当这一行是空行时，伪造一个不可见的空格把高度撑开，找回丢失的空行 */
+.streamdown-markdown[data-streamdown="code-block-body"] .line:empty::after {
+    content: ' ';
 }
 
 /* 关闭 streamdown 内置的行号：shiki 会在每行 span 上挂

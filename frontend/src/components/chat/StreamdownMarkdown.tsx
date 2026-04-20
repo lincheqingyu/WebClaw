@@ -192,7 +192,9 @@ export function StreamdownMarkdown({
       className={clsx('streamdown-markdown space-y-2', className)}
       controls={STREAMDOWN_CONTROLS}
       icons={{ CopyIcon: ClaudeCopyIcon }}
-      lineNumbers={false}
+      // streamdown 依赖 lineNumbers=true 给每一行挂 block 级类名；
+      // 行号本身由 index.css 隐藏。
+      lineNumbers
       linkSafety={{ enabled: false }}
       mermaid={mermaidOptions}
       normalizeHtmlIndentation

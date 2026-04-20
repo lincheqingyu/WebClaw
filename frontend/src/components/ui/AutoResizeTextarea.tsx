@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type KeyboardEvent } from 'react'
+import { useCallback, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react'
 import { useAutoResize } from '../../hooks/useAutoResize'
 
 interface AutoResizeTextareaProps {
@@ -22,6 +22,8 @@ interface AutoResizeTextareaProps {
   disabled?: boolean
   /** 粘贴事件 */
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void
+  /** 外部 textarea ref（用于恢复焦点 / 光标） */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>
 }
 
 /**
@@ -42,8 +44,16 @@ export function AutoResizeTextarea({
   onLayoutChange,
   disabled = false,
   onPaste,
+  textareaRef,
 }: AutoResizeTextareaProps) {
-  const textareaRef = useAutoResize(value, maxRows, onLayoutChange)
+  const internalTextareaRef = useAutoResize(value, maxRows, onLayoutChange)
+  const handleTextareaRef = useCallback((node: HTMLTextAreaElement | null) => {
+    internalTextareaRef.current = node
+
+    if (textareaRef) {
+      textareaRef.current = node
+    }
+  }, [internalTextareaRef, textareaRef])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行，Shift+Tab 切换模式 */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -62,7 +72,7 @@ export function AutoResizeTextarea({
 
   return (
     <textarea
-      ref={textareaRef}
+      ref={handleTextareaRef}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={handleKeyDown}

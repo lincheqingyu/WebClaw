@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { FileText, Plus, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import type { ChatAttachment } from '@lecquy/shared'
 import { AutoResizeTextarea } from './AutoResizeTextarea'
 import { CategoryTags } from './CategoryTags'
@@ -69,11 +69,35 @@ export function ChatInput({
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [isReadingAttachments, setIsReadingAttachments] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const shouldRestoreFocusRef = useRef(false)
+  const selectionRangeRef = useRef<{ start: number; end: number } | null>(null)
 
   const previewAttachments = useMemo(() => attachments.map((attachment) => ({
     attachment,
     previewUrl: buildAttachmentPreviewUrl(attachment),
   })), [attachments])
+
+  const queueTextareaFocusRestore = useCallback((selection?: { start: number; end: number } | null) => {
+    shouldRestoreFocusRef.current = true
+    selectionRangeRef.current = selection ?? null
+  }, [])
+
+  const restoreTextareaFocus = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea || disabled) return
+
+    textarea.focus()
+
+    const selection = selectionRangeRef.current
+    const fallbackPosition = textarea.value.length
+    const start = Math.min(selection?.start ?? fallbackPosition, textarea.value.length)
+    const end = Math.min(selection?.end ?? fallbackPosition, textarea.value.length)
+    textarea.setSelectionRange(start, end)
+
+    shouldRestoreFocusRef.current = false
+    selectionRangeRef.current = null
+  }, [disabled])
 
   /** 发送消息（暂时为空操作，后续接入） */
   const handleSend = () => {
@@ -114,6 +138,7 @@ export function ChatInput({
     const nextFiles = Array.from(event.target.files ?? [])
     event.target.value = ''
     if (nextFiles.length === 0) return
+    queueTextareaFocusRestore()
     await appendFiles(nextFiles)
   }
 
@@ -134,6 +159,10 @@ export function ChatInput({
     if (files.length === 0) return
 
     event.preventDefault()
+    queueTextareaFocusRestore({
+      start: event.currentTarget.selectionStart,
+      end: event.currentTarget.selectionEnd,
+    })
     void appendFiles(files)
   }
 
@@ -165,6 +194,16 @@ export function ChatInput({
       setIsMultiline(false)
     }
   }, [attachments.length, message])
+
+  useEffect(() => {
+    if (!shouldRestoreFocusRef.current || isReadingAttachments) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      restoreTextareaFocus()
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [attachmentError, attachments.length, isReadingAttachments, restoreTextareaFocus])
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -249,6 +288,7 @@ export function ChatInput({
               onSend={handleSend}
               onToggleThinking={toggleThinking}
               onPaste={handlePaste}
+              textareaRef={textareaRef}
               maxRows={10}
               onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
               className={clsx('px-1 py-0', 'max-h-[15rem] min-h-8')}
@@ -297,6 +337,7 @@ export function ChatInput({
               onSend={handleSend}
               onToggleThinking={toggleThinking}
               onPaste={handlePaste}
+              textareaRef={textareaRef}
               maxRows={10}
               onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
               className={clsx('px-1 py-1', 'max-h-[15rem] min-h-8')}
