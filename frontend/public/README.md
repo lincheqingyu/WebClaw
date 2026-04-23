@@ -5,7 +5,8 @@
 当前保留文件：
 
 - `Designer-6_svg.svg`：当前桌面标签页使用的 SVG favicon
-- `lecquy-mark-nobg.png`：左侧栏品牌图（透明底）
+- `logo-light-mode.png`：亮色模式品牌图（透明底）
+- `logo-dark-mode.png`：暗色模式品牌图（透明底）
 
 清理约定：
 

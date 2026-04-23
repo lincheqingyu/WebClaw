@@ -30,6 +30,10 @@ export {
   type PreambleEvent,
 } from './tool-permission.js'
 export {
+  getPermissionManager,
+  clearPermissionManagerCache,
+} from './permission-manager-registry.js'
+export {
   AgentExecutionError,
   MAX_ITERATIONS,
   MAX_TOOL_FAILURES,

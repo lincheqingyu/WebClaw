@@ -10,6 +10,7 @@ import { buildManagerPrompt } from '../core/prompts/system-prompts.js'
 import type { WorkerReceipt } from '../core/prompts/prompt-layer-types.js'
 import { createManagerTools } from './tools/index.js'
 import { createPermissionAwareTools, type AgentRuntimeEvent, type ConfirmRequiredEvent } from './tool-permission.js'
+import { getPermissionManager } from './permission-manager-registry.js'
 import { mutateProviderPayload } from './provider-payload.js'
 import { logProviderStreamEvent } from './provider-stream-debug.js'
 import {
@@ -107,10 +108,12 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
   const rawTools = createManagerTools(todoManager)
   const layeredPermissionEnabled = process.env.LAYERED_PROMPT === 'true'
   let pendingConfirmEvent: ConfirmRequiredEvent | undefined
+  const permissionManager = await getPermissionManager(workspaceDir)
   const tools = createPermissionAwareTools(rawTools, {
     role: 'manager',
     workspaceDir,
     enabled: layeredPermissionEnabled,
+    manager: permissionManager,
     onEvent: (event) => {
       if (event.type === 'confirm_required') {
         pendingConfirmEvent = event

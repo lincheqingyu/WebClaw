@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import type { AgentEvent, AgentTool } from '@mariozechner/pi-agent-core'
 import { PermissionTier, type AgentRole } from '../core/prompts/prompt-layer-types.js'
+import { bridgeResult, type BridgedTier, type PermissionManager } from '../runtime/permissions/index.js'
 
 const AUTO_TOOLS = new Set([
   'read_file',
@@ -184,6 +185,26 @@ export function isWorkerAllowed(toolName: string): boolean {
   return !WORKER_BLACKLIST.has(toolName)
 }
 
+/**
+ * 取更严格的 `PermissionTier`（Confirm > Preamble > Auto）。
+ * 用于双引擎并行时合并新旧决策。
+ */
+function mostRestrictiveTier(a: PermissionTier, b: PermissionTier): PermissionTier {
+  const rank = (t: PermissionTier): number => {
+    switch (t) {
+      case PermissionTier.Confirm:
+        return 2
+      case PermissionTier.Preamble:
+        return 1
+      case PermissionTier.Auto:
+        return 0
+      default:
+        return 0
+    }
+  }
+  return rank(a) >= rank(b) ? a : b
+}
+
 export function createPermissionAwareTools(
   tools: readonly AgentTool<any>[],
   options: {
@@ -191,6 +212,14 @@ export function createPermissionAwareTools(
     workspaceDir: string
     enabled: boolean
     onEvent?: (event: ToolPermissionEvent) => void
+    /**
+     * 新权限引擎实例（可选）。
+     *
+     * 若提供，则与现有 `classifyToolPermission` 双引擎并行决策，取更严格一方。
+     * 新引擎的硬拒绝（hardDeny）会直接短路，不走 Confirm 的等待确认流程。
+     * 新引擎抛错时优雅降级到旧引擎。
+     */
+    manager?: PermissionManager
   },
 ): AgentTool<any>[] {
   if (!options.enabled) {
@@ -201,7 +230,42 @@ export function createPermissionAwareTools(
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       const args = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>
-      const tier = classifyToolPermission(tool.name, args, options.role, options.workspaceDir)
+
+      // 1. 新引擎决策（若注入）
+      let bridged: BridgedTier | null = null
+      if (options.manager) {
+        try {
+          const result = await options.manager.check({
+            toolName: tool.name,
+            args,
+            workspaceDir: options.workspaceDir,
+            role: options.role,
+          })
+          bridged = bridgeResult(result)
+        } catch {
+          // 新引擎失败降级到旧引擎，保持主路径可用
+          bridged = null
+        }
+      }
+
+      // 2. 硬拒绝短路：不走 Confirm，直接抛错
+      if (bridged?.hardDeny) {
+        const description = bridged.description
+        options.onEvent?.({
+          type: 'confirm_required',
+          toolCallId,
+          toolName: tool.name,
+          args,
+          description,
+        })
+        throw new Error(description)
+      }
+
+      // 3. 旧引擎决策
+      const legacyTier = classifyToolPermission(tool.name, args, options.role, options.workspaceDir)
+
+      // 4. 双引擎取更严格
+      const tier = bridged ? mostRestrictiveTier(bridged.tier, legacyTier) : legacyTier
 
       if (tier === PermissionTier.Preamble) {
         options.onEvent?.({
@@ -209,12 +273,12 @@ export function createPermissionAwareTools(
           toolCallId,
           toolName: tool.name,
           args,
-          description: buildPermissionDescription(tool.name, args, tier),
+          description: bridged?.description ?? buildPermissionDescription(tool.name, args, tier),
         })
       }
 
       if (tier === PermissionTier.Confirm) {
-        const description = buildPermissionDescription(tool.name, args, tier)
+        const description = bridged?.description ?? buildPermissionDescription(tool.name, args, tier)
         options.onEvent?.({
           type: 'confirm_required',
           toolCallId,

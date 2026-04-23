@@ -575,6 +575,7 @@ export function HomePageLayout() {
           void handleDeleteConversation(conversationId)
         }}
         isLoading={isSessionListLoading}
+        isDark={isDark}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         {sessionError && (

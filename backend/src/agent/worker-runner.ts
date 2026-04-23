@@ -14,6 +14,7 @@ import {
   type AgentRuntimeEvent,
   type ConfirmRequiredEvent,
 } from './tool-permission.js'
+import { getPermissionManager } from './permission-manager-registry.js'
 import { mutateProviderPayload } from './provider-payload.js'
 import { logProviderStreamEvent } from './provider-stream-debug.js'
 import {
@@ -169,10 +170,12 @@ export async function runWorkerAgent(options: WorkerAgentOptions): Promise<Worke
     ? AbortSignal.any([normalized.signal, abortController.signal])
     : abortController.signal
 
+  const permissionManager = await getPermissionManager(normalized.workspaceDir)
   const tools = createPermissionAwareTools(rawTools, {
     role: 'worker',
     workspaceDir: normalized.workspaceDir,
     enabled: layeredPermissionEnabled,
+    manager: permissionManager,
     onEvent: (event) => {
       if (event.type === 'confirm_required') {
         pendingConfirmEvent = event

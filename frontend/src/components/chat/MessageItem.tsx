@@ -786,7 +786,7 @@ export function MessageItem({
         {/* {isLastAssistant && (
           <div className="group/brand mt-2 flex items-center gap-2 pl-1">
             <img
-              src="/lecquy-mark-nobg.png"
+              src="/logo-light-mode.png"
               alt="Lecquy"
               className="size-7 object-contain opacity-30 transition-opacity duration-200 group-hover/brand:opacity-70"
             />

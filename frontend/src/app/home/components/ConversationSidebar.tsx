@@ -21,6 +21,7 @@ interface ConversationSidebarProps {
   onRenameConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
   isLoading?: boolean
+  isDark: boolean
 }
 
 export function ConversationSidebar({
@@ -35,14 +36,13 @@ export function ConversationSidebar({
   onRenameConversation,
   onDeleteConversation,
   isLoading = false,
+  isDark,
 }: ConversationSidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [menuPlacement, setMenuPlacement] = useState<'up' | 'down'>('down')
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const menuPanelRef = useRef<HTMLDivElement | null>(null)
-  const collapsedIconShellClass = 'inline-flex h-9 w-9 items-center justify-center rounded-full'
-  const collapsedGlyphClass = 'size-[18px] shrink-0'
 
   const updateMenuPlacement = useCallback(() => {
     const button = menuButtonRef.current
@@ -106,53 +106,47 @@ export function ConversationSidebar({
       className={[
         'h-full shrink-0 border-r border-border/60',
         'transition-[width] duration-300 ease-out',
-        collapsed ? 'w-16 bg-surface-alt' : 'w-[16.5rem] bg-sidebar-panel',
+        collapsed ? 'w-12 bg-surface-alt' : 'w-[16.5rem] bg-sidebar-panel',
       ].join(' ')}
       aria-label="会话管理栏"
     >
       <div className="flex h-full flex-col">
+        {/* 顶部：折叠态为 Logo（hover 瞬间切换为展开图标）；展开态为纯文字品牌 + 收起按钮 */}
         {collapsed ? (
-          <div className="shrink-0 px-3 pb-1.5 pt-3">
+          <div className="shrink-0 px-2 pb-1.5 pt-3">
             <button
               type="button"
               onClick={onToggleCollapse}
-              className={[
-                'flex h-11 w-full items-center justify-center rounded-2xl text-text-primary',
-                'transition-colors hover:bg-sidebar-hover',
-              ].join(' ')}
+              className="group flex h-11 w-full items-center justify-center rounded-xl text-text-primary transition-colors hover:bg-sidebar-hover"
               aria-label="展开会话栏"
               title="展开会话栏"
             >
-              <span className={collapsedIconShellClass}>
-                <PanelLeftOpen className={[collapsedGlyphClass, 'translate-x-px'].join(' ')} />
-              </span>
+              {/* 默认：显示 Logo；hover 时瞬间隐藏 */}
+              <img
+                src={isDark ? '/logo-dark-mode.png' : '/logo-light-mode.png'}
+                alt=""
+                aria-hidden="true"
+                className="h-7 w-7 shrink-0 object-contain group-hover:hidden"
+                loading="eager"
+              />
+              {/* hover 时：瞬间显示展开图标 */}
+              <PanelLeftOpen className="hidden size-[18px] shrink-0 group-hover:block" />
             </button>
           </div>
         ) : (
-          <div className="shrink-0 px-3 pb-2 pt-3">
-            <div className="grid h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] items-center gap-3 rounded-2xl">
-              <div className="inline-flex h-9 w-9 items-center justify-center justify-self-center overflow-visible">
-                <img
-                  src="/lecquy-mark-nobg.png"
-                  alt="Lecquy"
-                  className="block h-7.5 w-7.5 shrink-0 translate-y-[3px] scale-[1.24] object-contain"
-                  loading="eager"
-                />
-              </div>
+          <div className="shrink-0 px-3 pb-6 pt-3">
+            {/* pl-3：把标题往内推 12px，与下方菜单按钮内部图标起点（12+12=24px）对齐 */}
+            <div className="flex h-11 w-full items-center justify-between pl-3">
+              {/* 品牌区：衬线纯文字标题（沿用 Claude 做法） */}
+              <span className="font-serif-mix whitespace-nowrap text-[2rem] font-normal leading-none text-text-primary">
+                Lecquy
+              </span>
 
-              <div className="flex min-w-0 items-center">
-                <div className="overflow-visible whitespace-nowrap pb-[3px] text-[1.5rem] font-semibold leading-[1.08] tracking-[-0.045em] text-text-primary">
-                  Lecquy
-                </div>
-              </div>
-
+              {/* 收起按钮：默认主文字色（黑/白），hover 仅加背景 */}
               <button
                 type="button"
                 onClick={onToggleCollapse}
-                className={[
-                  'inline-flex h-9 w-9 shrink-0 items-center justify-center justify-self-end rounded-xl text-text-secondary',
-                  'transition-colors hover:bg-sidebar-hover hover:text-text-primary',
-                ].join(' ')}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-primary transition-colors hover:bg-sidebar-hover"
                 aria-label="收起会话栏"
                 title="收起会话栏"
               >
@@ -162,71 +156,61 @@ export function ConversationSidebar({
           </div>
         )}
 
-        <div className="px-3 pb-3">
+        {/* 菜单区：新建会话 / 会话 —— 展开态 flex + px-3 + gap-3；折叠态窄栏圆角收小为 rounded-xl */}
+        <div className={collapsed ? 'px-2 pb-3' : 'px-3 pb-3'}>
           <div className="flex flex-col gap-1.5">
             <button
               type="button"
               onClick={onCreateConversation}
-              className={[
+              className={
                 collapsed
-                  ? 'flex h-11 w-full items-center justify-center rounded-2xl text-text-primary transition-colors hover:bg-sidebar-hover'
-                  : 'grid h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-2xl text-left transition-colors hover:bg-sidebar-hover',
-              ].join(' ')}
+                  ? 'flex h-11 w-full items-center justify-center rounded-xl text-text-primary transition-colors hover:bg-sidebar-hover'
+                  : 'flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left text-text-primary transition-colors hover:bg-sidebar-hover'
+              }
               aria-label="新建会话"
               title="新建会话"
             >
-              {/* "+" 按钮：展开态圈圈收紧到 h-7 w-7，Plus 放大到 size-5；折叠态无圈仅放大图标 */}
+              {/* "+" 图标：展开态带实心圆底色作为视觉焦点；折叠态仅显示图标 */}
               <span
-                className={[
-                  'inline-flex shrink-0 items-center justify-center rounded-full text-text-primary',
-                  collapsed ? 'h-9 w-9' : 'h-7 w-7 bg-sidebar-active',
-                ].join(' ')}
+                className={
+                  collapsed
+                    ? 'inline-flex size-7 shrink-0 items-center justify-center'
+                    : 'inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-active'
+                }
               >
-                <Plus className="size-5 shrink-0 translate-y-px" />
+                <Plus className="size-5 shrink-0" />
               </span>
-              {!collapsed && (
-                <span className="overflow-hidden whitespace-nowrap text-sm font-medium text-text-primary transition-[opacity,width] duration-200">
-                  新建会话
-                </span>
-              )}
+              {!collapsed && <span className="truncate text-sm font-medium">新建会话</span>}
             </button>
 
             <button
               type="button"
               onClick={onOpenSessions}
-              className={[
+              className={
                 collapsed
-                  ? [
-                      'flex h-11 w-full items-center justify-center rounded-2xl transition-colors',
-                      activeView === 'sessions'
-                        ? 'text-text-primary'
-                        : 'text-text-primary hover:bg-sidebar-hover',
-                    ].join(' ')
+                  ? 'flex h-11 w-full items-center justify-center rounded-xl text-text-primary transition-colors hover:bg-sidebar-hover'
                   : [
-                      'grid h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-2xl text-left',
+                      'flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left text-text-primary',
                       activeView === 'sessions'
-                        ? 'bg-sidebar-active text-text-primary'
-                        : 'text-text-primary transition-colors hover:bg-sidebar-hover',
-                    ].join(' '),
-              ].join(' ')}
+                        ? 'bg-sidebar-active'
+                        : 'transition-colors hover:bg-sidebar-hover',
+                    ].join(' ')
+              }
               aria-label="会话"
               title="会话"
               aria-current={activeView === 'sessions' ? 'page' : undefined}
             >
+              {/* 会话图标：仅在"折叠 + 选中"时加圆底色，其余情况均为纯图标 */}
               <span
-                className={[
-                  collapsedIconShellClass,
-                  'text-text-primary',
-                  collapsed && activeView === 'sessions' ? 'rounded-full bg-sidebar-active' : '',
-                ].join(' ')}
+                className={
+                  collapsed && activeView === 'sessions'
+                    ? 'inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-active'
+                    : 'inline-flex size-7 shrink-0 items-center justify-center'
+                }
               >
-                <MessageSquareText className={[collapsedGlyphClass, 'translate-y-px'].join(' ')} />
+                <MessageSquareText className="size-[18px] shrink-0" />
               </span>
-              {!collapsed && (
-                <span className="overflow-hidden whitespace-nowrap text-sm font-medium transition-[opacity,width] duration-200">
-                  会话
-                </span>
-              )}
+              {!collapsed && <span className="truncate text-sm font-medium">会话</span>}
             </button>
           </div>
         </div>

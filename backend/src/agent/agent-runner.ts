@@ -11,6 +11,7 @@ import { resolveWorkspaceRoot } from '../core/runtime-paths.js'
 import { buildSimpleSystemPrompt } from '../core/prompts/system-prompts.js'
 import { createSimpleTools } from './tools/index.js'
 import { createPermissionAwareTools, type AgentRuntimeEvent, type ConfirmRequiredEvent } from './tool-permission.js'
+import { getPermissionManager } from './permission-manager-registry.js'
 import { mutateProviderPayload } from './provider-payload.js'
 import { logProviderStreamEvent } from './provider-stream-debug.js'
 import {
@@ -81,10 +82,12 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
   const rawTools = enableTools ? createSimpleTools() : []
   const layeredPermissionEnabled = process.env.LAYERED_PROMPT === 'true'
   let pendingConfirmEvent: ConfirmRequiredEvent | undefined
+  const permissionManager = await getPermissionManager(workspaceDir)
   const tools = createPermissionAwareTools(rawTools, {
     role: 'simple',
     workspaceDir,
     enabled: layeredPermissionEnabled && enableTools,
+    manager: permissionManager,
     onEvent: (event) => {
       if (event.type === 'confirm_required') {
         pendingConfirmEvent = event

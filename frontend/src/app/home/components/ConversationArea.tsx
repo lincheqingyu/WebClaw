@@ -259,16 +259,18 @@ export function ConversationArea({
       <div className="flex-1 min-h-0">
         {!hasSent ? (
           <div className="flex h-full flex-col items-center justify-center">
-            <div className="mb-8 text-center">
-              <div className="flex items-center justify-center gap-3">
+            <div className="mb-10 text-center">
+              <div className="flex items-center justify-center gap-2">
                 <img
-                  src="/logo2-no-bg-svg.svg"
+                  src={isDark ? '/logo-dark-mode.png' : '/logo-light-mode.png'}
                   alt="Lecquy"
-                  className="h-10 w-10 object-contain"
+                  className="h-16 w-16 object-contain"
                 />
-                <div className="text-2xl font-semibold text-text-primary">有什么我可以帮你的？</div>
+                <div className="font-serif-mix text-4xl font-normal text-text-primary">
+                  Welcome, Master
+                </div>
               </div>
-              <div className="mt-2 text-sm text-text-muted">支持 simple 与 plan 两种模式</div>
+              <div className="mt-4 text-base text-text-muted">支持 simple 与 plan 两种模式</div>
             </div>
             <ChatInputComp
               mode={mode}
