@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createDefaultThinkingConfig, type ChatAttachment } from '@lecquy/shared'
 import { ConversationArea } from './ConversationArea'
+import { TopBar } from './TopBar'
 import { ChatsOverview } from './ChatsOverview'
 import { DocumentPanel } from './DocumentPanel'
 import { ArtifactPanel } from '../../../components/artifacts/ArtifactPanel'
@@ -552,6 +553,7 @@ export function HomePageLayout() {
         'transition-colors duration-300',
       ].join(' ')}
     >
+      {/* Sidebar：独占全高，左侧固定 */}
       <ConversationSidebar
         conversations={sidebarItems}
         activeConversationId={selectedSessionKey}
@@ -577,28 +579,38 @@ export function HomePageLayout() {
         isLoading={isSessionListLoading}
         isDark={isDark}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        {sessionError && (
-          <div className="shrink-0 border-b border-border bg-surface px-4 py-2 text-xs text-text-muted">
-            {sessionError}
-          </div>
-        )}
-        {activeView === 'sessions' ? (
-          <ChatsOverview
-            conversations={sidebarItems}
-            onCreateConversation={handleStartNewConversation}
-            onSelectConversation={(conversationId) => {
-              void handleSelectConversation(conversationId)
-            }}
-          />
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+
+      {/* 右侧区域：TopBar + 内容区 + 设置抽屉，纵向排列 */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TopBar
+          conversationTitle={conversationTitle}
+          sessionMetaText={sessionMetaText}
+          isDark={isDark}
+          onThemeToggle={() => setIsDark((prev) => !prev)}
+          onSettingsToggle={handleSettingsToggle}
+        />
+
+        {/* 内容区 + 设置抽屉，横向排列 */}
+        <div className="flex min-w-0 flex-1 overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {sessionError && (
+            <div className="shrink-0 border-b border-border bg-surface px-4 py-2 text-xs text-text-muted">
+              {sessionError}
+            </div>
+          )}
+          {activeView === 'sessions' ? (
+            <ChatsOverview
+              conversations={sidebarItems}
+              onCreateConversation={handleStartNewConversation}
+              onSelectConversation={(conversationId) => {
+                void handleSelectConversation(conversationId)
+              }}
+            />
+          ) : (
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 <ConversationArea
-                  onSettingsToggle={handleSettingsToggle}
                   isDark={isDark}
-                  onThemeToggle={() => setIsDark((prev) => !prev)}
                   modelConfig={modelConfig}
                   conversationTitle={conversationTitle}
                   sessionMetaText={sessionMetaText}
@@ -615,7 +627,6 @@ export function HomePageLayout() {
                   onOpenArtifact={handleOpenArtifact}
                   onArtifactsChange={setCurrentArtifacts}
                   activeAttachmentKey={showDocumentWorkspace ? openDocument?.key ?? null : null}
-                  showHeader={true}
                   workspaceMode={showDocumentWorkspace ? 'split' : 'default'}
                 />
               </div>
@@ -671,15 +682,18 @@ export function HomePageLayout() {
                 </>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* 设置抽屉：宽度动画 0 → 20rem，自然挤压主对话区 */}
+        <SettingsDrawer
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          modelConfig={modelConfig}
+          onModelConfigChange={setModelConfig}
+        />
       </div>
-      <SettingsDrawer
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        modelConfig={modelConfig}
-        onModelConfigChange={setModelConfig}
-      />
+    </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Moon, Settings, Square, Sun } from 'lucide-react'
+import { Square } from 'lucide-react'
 import type { ChatAttachment } from '@lecquy/shared'
 import { ChatInput, type ChatInputSubmitPayload } from '../../../components/ui/ChatInput'
 import { ApprovalCard } from '../../../components/chat/ApprovalCard'
@@ -21,12 +21,8 @@ import {
 } from '../../../lib/artifacts'
 
 interface ConversationAreaProps {
-  onSettingsToggle: () => void
   isDark: boolean
-  onThemeToggle: () => void
   modelConfig: ModelConfig
-  conversationTitle: string
-  sessionMetaText?: string | null
   peerId: string
   currentSessionKey?: string | null
   externalMessages: ChatMessage[]
@@ -41,17 +37,12 @@ interface ConversationAreaProps {
   /** 上抛当前会话的扁平化 artifacts，用于右侧面板订阅 draft 流式更新与弱自动打开 */
   onArtifactsChange?: (artifacts: ArtifactWithLocation[]) => void
   activeAttachmentKey?: string | null
-  showHeader?: boolean
   workspaceMode?: 'default' | 'split'
 }
 
 export function ConversationArea({
-  onSettingsToggle,
   isDark,
-  onThemeToggle,
   modelConfig,
-  conversationTitle,
-  sessionMetaText = null,
   peerId,
   currentSessionKey = null,
   externalMessages,
@@ -65,7 +56,6 @@ export function ConversationArea({
   onOpenArtifact,
   onArtifactsChange,
   activeAttachmentKey = null,
-  showHeader = true,
   workspaceMode = 'default',
 }: ConversationAreaProps) {
   const [scrollRequestVersion, setScrollRequestVersion] = useState(0)
@@ -208,58 +198,9 @@ export function ConversationArea({
 
   return (
     <div
-      className={[
-        'relative flex min-h-0 flex-1 flex-col overflow-hidden',
-        isSplitWorkspace ? 'bg-surface-alt' : 'border-r border-border bg-surface-alt',
-      ].join(' ')}
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-alt"
     >
-      {showHeader && (
-        <header className="h-12 shrink-0 bg-surface-alt/95 backdrop-blur">
-          <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
-            <div className="min-w-0 flex items-center gap-3">
-              <h1 className="line-clamp-1 text-sm font-medium text-text-primary">{conversationTitle}</h1>
-              {sessionMetaText && (
-                <div className="shrink-0 text-xs text-text-muted">
-                  {sessionMetaText}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onThemeToggle}
-                className={[
-                  'flex items-center justify-center',
-                  'size-9 rounded-lg',
-                  'text-text-secondary',
-                  'transition-colors hover:bg-hover hover:text-text-primary',
-                ].join(' ')}
-                aria-label={isDark ? '切换到亮色模式' : '切换到暗色模式'}
-              >
-                {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSettingsToggle()
-                }}
-                className={[
-                  'flex items-center justify-center',
-                  'size-9 rounded-lg',
-                  'text-text-secondary',
-                  'transition-colors hover:bg-hover hover:text-text-primary',
-                ].join(' ')}
-                aria-label="打开设置"
-              >
-                <Settings className="size-5" />
-              </button>
-            </div>
-          </div>
-        </header>
-      )}
-
-      <div className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1">
         {!hasSent ? (
           <div className="flex h-full flex-col items-center justify-center">
             <div className="mb-10 text-center">

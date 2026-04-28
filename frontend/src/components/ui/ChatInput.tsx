@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { FileText, Plus, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import type { ChatAttachment } from '@lecquy/shared'
 import { AutoResizeTextarea } from './AutoResizeTextarea'
 import { CategoryTags } from './CategoryTags'
@@ -53,6 +53,11 @@ function normalizeIncomingFile(file: File, index: number): File {
  *
  * 管理输入状态，组合 AutoResizeTextarea + InputToolbar + CategoryTags。
  * 容器采用圆角 + 阴影样式，hover/focus-within 时阴影增强。
+ *
+ * 关键设计：<AutoResizeTextarea> 在整个组件生命周期内始终位于同一棵 JSX 子树的同一位置
+ * 且带有稳定的 key="textarea"，无论 compact / expanded 如何切换都不会被 unmount/remount。
+ * compact 与 expanded 的视觉差异通过条件渲染兄弟节点（+按钮、planBadge、附件区、工具栏）
+ * 与切换样式类来实现，从根源上消除粘贴文字 / 附件触发 isMultiline 翻转时的焦点丢失问题。
  */
 export function ChatInput({
   mode,
@@ -70,34 +75,11 @@ export function ChatInput({
   const [isReadingAttachments, setIsReadingAttachments] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const shouldRestoreFocusRef = useRef(false)
-  const selectionRangeRef = useRef<{ start: number; end: number } | null>(null)
 
   const previewAttachments = useMemo(() => attachments.map((attachment) => ({
     attachment,
     previewUrl: buildAttachmentPreviewUrl(attachment),
   })), [attachments])
-
-  const queueTextareaFocusRestore = useCallback((selection?: { start: number; end: number } | null) => {
-    shouldRestoreFocusRef.current = true
-    selectionRangeRef.current = selection ?? null
-  }, [])
-
-  const restoreTextareaFocus = useCallback(() => {
-    const textarea = textareaRef.current
-    if (!textarea || disabled) return
-
-    textarea.focus()
-
-    const selection = selectionRangeRef.current
-    const fallbackPosition = textarea.value.length
-    const start = Math.min(selection?.start ?? fallbackPosition, textarea.value.length)
-    const end = Math.min(selection?.end ?? fallbackPosition, textarea.value.length)
-    textarea.setSelectionRange(start, end)
-
-    shouldRestoreFocusRef.current = false
-    selectionRangeRef.current = null
-  }, [disabled])
 
   /** 发送消息（暂时为空操作，后续接入） */
   const handleSend = () => {
@@ -138,8 +120,10 @@ export function ChatInput({
     const nextFiles = Array.from(event.target.files ?? [])
     event.target.value = ''
     if (nextFiles.length === 0) return
-    queueTextareaFocusRestore()
     await appendFiles(nextFiles)
+    // 系统文件对话框关闭后焦点离开了 textarea，需要主动送回；
+    // 粘贴 / 拖拽路径下 textarea 不会被 unmount，焦点天然保持，无需任何额外处理。
+    if (!disabled) textareaRef.current?.focus()
   }
 
   const handleRemoveAttachment = (index: number) => {
@@ -159,10 +143,6 @@ export function ChatInput({
     if (files.length === 0) return
 
     event.preventDefault()
-    queueTextareaFocusRestore({
-      start: event.currentTarget.selectionStart,
-      end: event.currentTarget.selectionEnd,
-    })
     void appendFiles(files)
   }
 
@@ -179,7 +159,7 @@ export function ChatInput({
   const compact = !showSuggestions
   const showExpanded = isMultiline || attachments.length > 0
   const planBadge = mode === 'plan' ? (
-        <button
+    <button
       type="button"
       onClick={() => onModeChange('simple')}
       className="inline-flex shrink-0 items-center rounded-full border border-border bg-surface-alt px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-text-secondary transition-colors hover:bg-hover hover:text-text-primary"
@@ -194,16 +174,6 @@ export function ChatInput({
       setIsMultiline(false)
     }
   }, [attachments.length, message])
-
-  useEffect(() => {
-    if (!shouldRestoreFocusRef.current || isReadingAttachments) return
-
-    const frameId = window.requestAnimationFrame(() => {
-      restoreTextareaFocus()
-    })
-
-    return () => window.cancelAnimationFrame(frameId)
-  }, [attachmentError, attachments.length, isReadingAttachments, restoreTextareaFocus])
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -225,98 +195,76 @@ export function ChatInput({
           !disabled && 'focus-within:shadow-[var(--shadow-input-hover)]',
         )}
       >
-        {showExpanded ? (
-          <div className={clsx('px-3 pt-3 pb-2')}>
-            {attachments.length > 0 && (
-              <div className="mb-3 space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  {previewAttachments.map(({ attachment, previewUrl }, index) => (
-                    attachment.kind === 'image' ? (
-                      <div
-                        key={`${attachment.name}_${index}`}
-                        className="group relative h-20 w-20 overflow-hidden rounded-2xl border border-border bg-surface-thought shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
-                      >
-                        <img
-                          src={previewUrl ?? ''}
-                          alt={attachment.name}
-                          className="h-full w-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveAttachment(index)}
-                          className="absolute right-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-full bg-surface/90 text-text-primary backdrop-blur transition-colors hover:bg-surface dark:text-white"
-                          aria-label={`移除附件 ${attachment.name}`}
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-2 py-1 text-[11px] text-white">
-                          <div className="truncate">{attachment.name}</div>
-                        </div>
+        {/* 第一段：附件预览区（仅在有附件时渲染，单独子树不影响主输入行结构） */}
+        {attachments.length > 0 && (
+          <div className="px-3 pt-3">
+            <div className="flex flex-wrap gap-2">
+              {previewAttachments.map(({ attachment, previewUrl }, index) => (
+                attachment.kind === 'image' ? (
+                  <div
+                    key={`${attachment.name}_${index}`}
+                    className="group relative h-20 w-20 overflow-hidden rounded-2xl border border-border bg-surface-thought shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
+                  >
+                    <img
+                      src={previewUrl ?? ''}
+                      alt={attachment.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(index)}
+                      className="absolute right-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-full bg-surface/90 text-text-primary backdrop-blur transition-colors hover:bg-surface dark:text-white"
+                      aria-label={`移除附件 ${attachment.name}`}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-2 py-1 text-[11px] text-white">
+                      <div className="truncate">{attachment.name}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={`${attachment.name}_${index}`}
+                    className="group relative flex min-w-[11rem] max-w-[15rem] items-start gap-3 rounded-2xl border border-border bg-surface-thought px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                  >
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface text-text-secondary">
+                      <FileText className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
+                      <div className="mt-0.5 text-xs text-text-secondary">
+                        {(attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : '文本文件')}
                       </div>
-                    ) : (
-                      <div
-                        key={`${attachment.name}_${index}`}
-                        className="group relative flex min-w-[11rem] max-w-[15rem] items-start gap-3 rounded-2xl border border-border bg-surface-thought px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
-                      >
-                        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface text-text-secondary">
-                          <FileText className="size-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-text-primary">{attachment.name}</div>
-                          <div className="mt-0.5 text-xs text-text-secondary">
-                            {(attachment.size ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : '文本文件')}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveAttachment(index)}
-                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-hover hover:text-text-primary dark:text-white"
-                          aria-label={`移除附件 ${attachment.name}`}
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </div>
-                    )
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <AutoResizeTextarea
-              value={message}
-              onChange={setMessage}
-              onSend={handleSend}
-              onToggleThinking={toggleThinking}
-              onPaste={handlePaste}
-              textareaRef={textareaRef}
-              maxRows={10}
-              onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
-              className={clsx('px-1 py-0', 'max-h-[15rem] min-h-8')}
-              disabled={disabled}
-            />
-            <div className="mt-1 flex h-8 items-center justify-between px-1">
-              <button
-                type="button"
-                onClick={handlePlusClick}
-                className={clsx(
-                  'flex shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5',
-                  'h-7 text-text-secondary transition-colors hover:bg-hover hover:text-text-primary',
-                )}
-                aria-label="添加附件"
-                disabled={disabled || isReadingAttachments}
-              >
-                <Plus className="size-4" />
-                <span className="text-xs font-medium">{isReadingAttachments ? '读取中...' : '附件'}</span>
-              </button>
-              <div className="flex items-center gap-2">
-                {planBadge}
-                {rightSlot && <div className="shrink-0">{rightSlot}</div>}
-              </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(index)}
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-hover hover:text-text-primary dark:text-white"
+                      aria-label={`移除附件 ${attachment.name}`}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )
+              ))}
             </div>
           </div>
-        ) : (
-          <div className={clsx('flex items-center gap-2', compact ? 'px-4 py-2' : 'px-3 py-3')}>
+        )}
+
+        {/* 第二段：主输入行 —— textarea 始终位于此处，带稳定 key 锁定 React 身份 */}
+        <div
+          className={clsx(
+            'flex items-center gap-2',
+            showExpanded
+              ? 'px-3 pt-3'
+              : compact
+                ? 'px-4 py-2'
+                : 'px-3 py-3',
+          )}
+        >
+          {!showExpanded && (
             <button
+              key="compact-plus"
               type="button"
               onClick={handlePlusClick}
               className={clsx(
@@ -329,21 +277,50 @@ export function ChatInput({
             >
               <Plus className="size-4" />
             </button>
-            {planBadge}
+          )}
+          {!showExpanded && planBadge && (
+            <Fragment key="compact-badge">{planBadge}</Fragment>
+          )}
 
-            <AutoResizeTextarea
-              value={message}
-              onChange={setMessage}
-              onSend={handleSend}
-              onToggleThinking={toggleThinking}
-              onPaste={handlePaste}
-              textareaRef={textareaRef}
-              maxRows={10}
-              onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
-              className={clsx('px-1 py-1', 'max-h-[15rem] min-h-8')}
-              disabled={disabled}
-            />
-            {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+          <AutoResizeTextarea
+            key="textarea"
+            value={message}
+            onChange={setMessage}
+            onSend={handleSend}
+            onToggleThinking={toggleThinking}
+            onPaste={handlePaste}
+            textareaRef={textareaRef}
+            maxRows={10}
+            onLayoutChange={({ multiline }) => setIsMultiline(multiline)}
+            className={clsx('px-1 py-1', 'max-h-[15rem] min-h-8')}
+            disabled={disabled}
+          />
+
+          {!showExpanded && rightSlot && (
+            <div key="compact-right" className="shrink-0">{rightSlot}</div>
+          )}
+        </div>
+
+        {/* 第三段：expanded 模式下方工具栏（仅 expanded 时渲染） */}
+        {showExpanded && (
+          <div className="flex h-8 items-center justify-between px-4 pt-1 pb-2">
+            <button
+              type="button"
+              onClick={handlePlusClick}
+              className={clsx(
+                'flex shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5',
+                'h-7 text-text-secondary transition-colors hover:bg-hover hover:text-text-primary',
+              )}
+              aria-label="添加附件"
+              disabled={disabled || isReadingAttachments}
+            >
+              <Plus className="size-4" />
+              <span className="text-xs font-medium">{isReadingAttachments ? '读取中...' : '附件'}</span>
+            </button>
+            <div className="flex items-center gap-2">
+              {planBadge}
+              {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+            </div>
           </div>
         )}
       </div>

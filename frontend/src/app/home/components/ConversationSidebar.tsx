@@ -216,7 +216,7 @@ export function ConversationSidebar({
         </div>
 
         {!collapsed && (
-          <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
+          <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden pl-3 pr-0 pb-3">
             {isLoading ? (
               <div className="px-2 py-4 text-xs text-text-muted">正在加载会话...</div>
             ) : conversations.length === 0 ? (

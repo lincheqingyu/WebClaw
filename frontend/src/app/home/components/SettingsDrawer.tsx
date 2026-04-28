@@ -90,9 +90,10 @@ function getModelPresetLabel(item: ModelPresetItem | null | undefined): string {
  *
  * 动画原理：
  * → 抽屉始终在 DOM 中（不会被销毁/创建）
- * → 通过 translate-x-full（向右移出屏幕）和 translate-x-0（回到原位）来控制显隐
- * → transition-transform 让位移带有平滑动画
- * → 这比 display:none 的方式性能更好，因为 GPU 可以加速 transform 动画
+ * → 作为 flex 兄弟元素参与主布局，宽度在 0 ↔ 20rem 之间动画
+ * → 关闭时宽度坍缩到 0，主对话区占满顶栏下 100% 宽
+ * → 打开时挤占主对话区的右侧空间，滚动条自然落在主对话区与设置区交界
+ * → 内层使用固定 w-[20rem]，配合外层 overflow-hidden，避免动画期间内容回流抖动
  */
 export function SettingsDrawer({
                                    isOpen,
@@ -612,346 +613,341 @@ export function SettingsDrawer({
         onClose()
     }
 
+    useEffect(() => {
+        if (!isOpen) return
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') handleDrawerClose()
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [isOpen, handleDrawerClose])
+
+    const hasSecondaryPanelOpen = isContextPanelOpen || isModelPanelOpen
+    const railCardClassName = 'rounded-xl border border-border bg-surface-alt p-4 shadow-[0_1px_2px_rgba(15,23,42,0.035)]'
+    const railButtonCardClassName = clsx(
+        railCardClassName,
+        'w-full text-left transition-colors hover:border-[color:var(--border-strong)] hover:bg-hover',
+    )
+
     return (
         <div
             className={clsx(
-                "h-screen shrink-0 overflow-hidden bg-surface-alt",
+                "shrink-0 overflow-hidden bg-surface-alt",
                 "transition-[width] duration-300 ease-in-out",
-                isOpen ? "w-80" : "w-0"
             )}
+            style={{width: isOpen ? '20rem' : '0'}}
+            role="complementary"
+            aria-label="设置辅助栏"
+            aria-hidden={!isOpen}
+            inert={!isOpen}
         >
-            {/* ---------- 抽屉头部 ---------- */}
-            <div
-                className={[
-                    "flex items-center justify-between",
-                    "h-12 px-6",
-                ].join(" ")}
-            >
-                <h2 className="text-lg font-semibold text-text-primary">设置</h2>
-                <button
-                    type="button"
-                    onClick={handleDrawerClose}
-                    className={[
-                        "flex items-center justify-center",
-                        "size-8 rounded",
-                        "text-text-secondary",
-                        "transition-colors hover:bg-hover hover:text-text-primary",
-                    ].join(" ")}
-                    aria-label="关闭设置"
+            {/* 内层固定 w-[20rem]，避免外层宽度动画过程中内容回流抖动 */}
+            <div className="flex h-full w-[20rem] flex-col">
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
+                <div
+                    ref={settingsScrollRef}
+                    className={clsx(
+                        "settings-scrollbar-hidden h-full overflow-y-auto px-4 py-4",
+                        hasSecondaryPanelOpen && "pointer-events-none invisible",
+                    )}
+                    style={{
+                        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black 100%)',
+                        maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black 100%)',
+                    }}
+                    aria-hidden={hasSecondaryPanelOpen}
                 >
-                    <X className="size-5"/>
-                </button>
-            </div>
-
-            {/* ---------- 抽屉内容 ---------- */}
-            <div ref={settingsScrollRef} className="relative h-[calc(100vh-48px)] overflow-y-auto px-6 py-5">
-                <div className="selector-container space-y-3">
-                    <div className="settings-item settings-model-selector">
-                        <div className="item-input-form-field">
-                            <button
-                                type="button"
-                                onClick={() => setIsModelPanelOpen(true)}
-                                className="model-selector-card w-full rounded-2xl border border-border bg-surface-raised p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
-                            >
-                                <span className="block text-sm font-semibold text-text-primary">Model selection</span>
-                                <span className="mt-1 block text-xs text-text-secondary">
-                                    {getModelPresetLabel(activeModelPreset) || modelConfig.model || '未设置模型'}
-                                </span>
-                                <span className="mt-1 block text-xs text-text-secondary">
-                                    {modelConfig.baseUrl || 'Select a model and adjust runtime parameters'}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
+                    <div className="space-y-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsModelPanelOpen(true)}
+                        className={railButtonCardClassName}
+                    >
+                        <span className="block text-[15px] font-semibold leading-5 text-text-primary">Model</span>
+                        <span className="mt-2 block truncate text-sm leading-5 text-text-secondary">
+                            {getModelPresetLabel(activeModelPreset) || modelConfig.model || '未设置模型'}
+                        </span>
+                        <span className="mt-0.5 block truncate text-sm leading-5 text-text-secondary">
+                            {modelConfig.baseUrl || 'Select a model and adjust runtime parameters'}
+                        </span>
+                    </button>
 
                     <button
                         type="button"
                         onClick={() => handleOpenContextPanel(selectedContextFile)}
-                        className="w-full rounded-2xl border border-border bg-surface-raised p-4 text-left shadow-sm transition-shadow hover:shadow-[var(--shadow-input)]"
+                        className={railButtonCardClassName}
                     >
-                        <span className="block text-sm font-semibold text-text-primary">Assistant context</span>
-                        <span className="mt-1 block text-xs text-text-secondary">
+                        <span className="block text-[15px] font-semibold leading-5 text-text-primary">Assistant context</span>
+                        <span className="mt-2 block text-sm leading-5 text-text-secondary">
                             Soul · Identity · User · Memory
                         </span>
-                        <span className="mt-1 block text-xs text-text-secondary">
+                        <span className="mt-1 block text-sm leading-5 text-text-secondary">
                             编辑 `.lecquy` 上下文文件，系统托管 AGENTS / TOOLS 只读
                         </span>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="mt-3 flex flex-wrap gap-2">
                             {EDITABLE_CONTEXT_FILES.map((file) => (
                                 <span
                                     key={file.name}
-                                    className="inline-flex rounded-full border border-border bg-surface-alt px-2 py-0.5 text-[11px] text-text-muted"
+                                    className="inline-flex rounded-full border border-border bg-surface-alt px-2.5 py-1 text-xs leading-none text-text-muted"
                                 >
                                     {file.title}
                                 </span>
                             ))}
-                        </div>
+                        </span>
                     </button>
-                </div>
 
-                <div className="my-6 h-px w-full bg-border" role="separator" aria-orientation="horizontal"/>
-
-                <div className="space-y-5">
-                    {/* Function Calling 开关 */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="text-sm font-semibold text-text-primary">Function Calling</h3>
-                            <p className="text-xs text-text-secondary mt-0.5">启用后模型可调用工具</p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={modelConfig.enableTools}
-                            onClick={() => updateModelConfig({enableTools: !modelConfig.enableTools})}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
-                                modelConfig.enableTools
-                                    ? 'border-[color:var(--color-toggle-on)] bg-[color:var(--color-toggle-on)]'
-                                    : 'border-[color:var(--color-toggle-off)] bg-[color:var(--color-toggle-off)]'
-                            }`}
-                        >
-                            <span className={`inline-block h-4 w-4 rounded-full shadow-sm transition-transform ${
-                                modelConfig.enableTools ? 'translate-x-6 bg-[color:var(--color-toggle-thumb-active)]' : 'translate-x-1 bg-[color:var(--color-toggle-thumb)]'
-                            }`}/>
-                        </button>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4">
-                        <div>
-                            <h3 className="text-sm font-semibold text-text-primary">Thinking enabled</h3>
-                            <p className="mt-0.5 text-xs text-text-secondary">显示折叠思考</p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={thinkingEnabled}
-                            disabled={!thinkingProtocolSelected}
-                            onClick={() => updateThinkingConfig({enabled: !thinkingConfig.enabled})}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
-                                thinkingEnabled
-                                    ? 'border-[color:var(--color-toggle-on)] bg-[color:var(--color-toggle-on)]'
-                                    : 'border-[color:var(--color-toggle-off)] bg-[color:var(--color-toggle-off)]'
-                            } ${!thinkingProtocolSelected ? 'cursor-not-allowed opacity-50' : ''}`}
-                        >
-                            <span className={`inline-block h-4 w-4 rounded-full shadow-sm transition-transform ${
-                                thinkingEnabled ? 'translate-x-6 bg-[color:var(--color-toggle-thumb-active)]' : 'translate-x-1 bg-[color:var(--color-toggle-thumb)]'
-                            }`}/>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="my-6 h-px w-full bg-border" role="separator" aria-orientation="horizontal"/>
-
-                <div className="settings-item-column settings-item-spacer">
-                    <div className="item-about item-about-slider">
-                        <div className="item-description">
-                            <h3 className="item-description-title text-sm font-semibold text-text-primary">Temperature</h3>
-                        </div>
-                    </div>
-                    <div className="item-input mt-3 flex items-center gap-3">
-                        <input
-                            type="range"
-                            min={0}
-                            max={2}
-                            step={0.05}
-                            value={modelConfig.temperature}
-                            onChange={(e) => updateModelConfig({temperature: Number(e.target.value)})}
-                            className="flex-1 accent-text-primary"
-                        />
-                        <input
-                            type="number"
-                            min={0}
-                            max={2}
-                            step={0.05}
-                            value={modelConfig.temperature}
-                            onChange={(e) => updateModelConfig({temperature: Number(e.target.value)})}
-                            className="w-14 rounded-lg border border-border bg-surface-raised py-1 text-center text-sm text-text-primary shadow-sm outline-none"
-                        />
-                    </div>
-                </div>
-
-                <div className="my-6 h-px w-full bg-border" role="separator" aria-orientation="horizontal"/>
-
-                <div className="space-y-5">
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-text-primary">Max tokens</h3>
-                            <p className="mt-0.5 text-xs text-text-secondary">回复上限</p>
-                        </div>
-                        <div ref={maxTokensDropdownRef} className="relative w-[128px] shrink-0">
-                            <div className="relative">
+                    <section className={railCardClassName} aria-label="Runtime">
+                        <h3 className="text-[15px] font-semibold leading-5 text-text-primary">Runtime</h3>
+                        <div className="mt-4 space-y-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <div className="text-sm font-semibold text-text-primary">Function Calling</div>
+                                    <div className="mt-0.5 text-xs text-text-secondary">启用后模型可调用工具</div>
+                                </div>
                                 <button
                                     type="button"
-                                    onClick={() => toggleInlineDropdown('maxTokens')}
-                                    className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface-raised px-3 py-2 text-sm shadow-sm"
-                                    aria-haspopup="listbox"
-                                    aria-expanded={isMaxTokensOpen}
-                                    aria-label="Max tokens"
+                                    role="switch"
+                                    aria-checked={modelConfig.enableTools}
+                                    onClick={() => updateModelConfig({enableTools: !modelConfig.enableTools})}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
+                                        modelConfig.enableTools
+                                            ? 'border-[color:var(--color-toggle-on)] bg-[color:var(--color-toggle-on)]'
+                                            : 'border-[color:var(--color-toggle-off)] bg-[color:var(--color-toggle-off)]'
+                                    }`}
                                 >
-                                    <div className="flex w-full min-w-0 items-center justify-between pr-2">
+                                    <span className={`inline-block h-4 w-4 rounded-full shadow-sm transition-transform ${
+                                        modelConfig.enableTools ? 'translate-x-6 bg-[color:var(--color-toggle-thumb-active)]' : 'translate-x-1 bg-[color:var(--color-toggle-thumb)]'
+                                    }`}/>
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <div className="text-sm font-semibold text-text-primary">Thinking enabled</div>
+                                    <div className="mt-0.5 text-xs text-text-secondary">显示折叠思考</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={thinkingEnabled}
+                                    disabled={!thinkingProtocolSelected}
+                                    onClick={() => updateThinkingConfig({enabled: !thinkingConfig.enabled})}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
+                                        thinkingEnabled
+                                            ? 'border-[color:var(--color-toggle-on)] bg-[color:var(--color-toggle-on)]'
+                                            : 'border-[color:var(--color-toggle-off)] bg-[color:var(--color-toggle-off)]'
+                                    } ${!thinkingProtocolSelected ? 'cursor-not-allowed opacity-50' : ''}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 rounded-full shadow-sm transition-transform ${
+                                        thinkingEnabled ? 'translate-x-6 bg-[color:var(--color-toggle-thumb-active)]' : 'translate-x-1 bg-[color:var(--color-toggle-thumb)]'
+                                    }`}/>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className={railCardClassName} aria-label="Generation">
+                        <h3 className="text-[15px] font-semibold leading-5 text-text-primary">Generation</h3>
+                        <div className="mt-4 space-y-5">
+                            <div>
+                                <div className="mb-3 text-sm font-semibold text-text-primary">Temperature</div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={2}
+                                        step={0.05}
+                                        value={modelConfig.temperature}
+                                        onChange={(e) => updateModelConfig({temperature: Number(e.target.value)})}
+                                        className="min-w-0 flex-1 accent-text-primary"
+                                    />
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={2}
+                                        step={0.05}
+                                        value={modelConfig.temperature}
+                                        onChange={(e) => updateModelConfig({temperature: Number(e.target.value)})}
+                                        className="w-16 rounded-xl border border-border bg-surface-alt py-1.5 text-center text-sm text-text-primary shadow-[0_1px_2px_rgba(15,23,42,0.06)] outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-semibold text-text-primary">Max tokens</div>
+                                    <div className="mt-0.5 text-xs text-text-secondary">回复上限</div>
+                                </div>
+                                <div ref={maxTokensDropdownRef} className="relative w-[132px] shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleInlineDropdown('maxTokens')}
+                                        className="flex w-full items-center justify-between rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isMaxTokensOpen}
+                                        aria-label="Max tokens"
+                                    >
                                         <span className="truncate text-text-primary">{selectedTokenOption.label}</span>
                                         <span className="text-xs text-text-muted">{selectedTokenOption.hint}</span>
-                                    </div>
-                                    <ChevronDown className="size-4 text-text-muted"/>
-                                </button>
+                                        <ChevronDown className="size-4 text-text-muted"/>
+                                    </button>
 
-                                {isMaxTokensOpen && (
-                                    <div
-                                        className="absolute right-0 z-20 mt-2 max-h-56 w-full overflow-auto rounded-2xl border border-border bg-surface-raised shadow-sm"
-                                        role="listbox"
-                                        aria-label="Max tokens options"
-                                    >
-                                        {tokenOptions.map((item) => {
-                                            const active = item.key === maxTokenPreset
-                                            return (
-                                                <button
-                                                    key={item.key}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        updateModelConfig({maxTokens: item.value})
-                                                        setActiveInlineDropdown(null)
-                                                    }}
-                                                    className={clsx(
-                                                        'flex w-full items-center justify-between px-3 py-2 text-sm',
-                                                        active ? 'bg-hover text-text-primary' : 'bg-surface-raised text-text-secondary hover:bg-hover hover:text-text-primary',
-                                                    )}
-                                                    role="option"
-                                                    aria-selected={active}
-                                                >
-                                                    <span>{item.label}</span>
-                                                    <span className="text-xs text-text-muted">{item.hint}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                )}
+                                    {isMaxTokensOpen && (
+                                        <div
+                                            className="absolute right-0 z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-surface-alt shadow-[0_8px_24px_rgba(15,23,42,0.10)]"
+                                            role="listbox"
+                                            aria-label="Max tokens options"
+                                        >
+                                            {tokenOptions.map((item) => {
+                                                const active = item.key === maxTokenPreset
+                                                return (
+                                                    <button
+                                                        key={item.key}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            updateModelConfig({maxTokens: item.value})
+                                                            setActiveInlineDropdown(null)
+                                                        }}
+                                                        className={clsx(
+                                                            'flex w-full items-center justify-between px-3 py-2 text-sm',
+                                                            active ? 'bg-settings-card-active text-text-primary' : 'bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                        )}
+                                                        role="option"
+                                                        aria-selected={active}
+                                                    >
+                                                        <span>{item.label}</span>
+                                                        <span className="text-xs text-text-muted">{item.hint}</span>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-text-primary">Thinking protocol</h3>
-                            <p className="mt-0.5 text-xs text-text-secondary">思考协议</p>
-                        </div>
-                        <div ref={thinkingProtocolDropdownRef} className="relative w-[128px] shrink-0">
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => toggleInlineDropdown('thinkingProtocol')}
-                                    className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface-raised px-3 py-2 text-sm shadow-sm"
-                                    aria-haspopup="listbox"
-                                    aria-expanded={isThinkingProtocolOpen}
-                                    aria-label="Thinking protocol"
-                                >
-                                    <div className="flex w-full min-w-0 items-center justify-between pr-2">
+                    <section className={railCardClassName} aria-label="Thinking">
+                        <h3 className="text-[15px] font-semibold leading-5 text-text-primary">Thinking</h3>
+                        <div className="mt-4 space-y-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-semibold text-text-primary">Thinking protocol</div>
+                                    <div className="mt-0.5 text-xs text-text-secondary">思考协议</div>
+                                </div>
+                                <div ref={thinkingProtocolDropdownRef} className="relative w-[132px] shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleInlineDropdown('thinkingProtocol')}
+                                        className="flex w-full items-center justify-between rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isThinkingProtocolOpen}
+                                        aria-label="Thinking protocol"
+                                    >
                                         <span className="truncate text-text-primary">{selectedThinkingProtocol.label}</span>
                                         <span className="text-xs text-text-muted">{thinkingProtocolSelected ? 'set' : 'off'}</span>
-                                    </div>
-                                    <ChevronDown className="size-4 text-text-muted"/>
-                                </button>
+                                        <ChevronDown className="size-4 text-text-muted"/>
+                                    </button>
 
-                                {isThinkingProtocolOpen && (
-                                    <div
-                                        className="absolute bottom-full right-0 z-20 mb-2 max-h-56 w-full overflow-auto rounded-2xl border border-border bg-surface-raised shadow-sm"
-                                        role="listbox"
-                                        aria-label="Thinking protocol options"
-                                    >
-                                        {thinkingProtocolOptions.map((item) => {
-                                            const active = item.value === thinkingConfig.protocol
-                                            return (
-                                                <button
-                                                    key={item.value}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        updateThinkingConfig({
-                                                            protocol: item.value,
-                                                            enabled: item.value === 'off' ? false : thinkingConfig.enabled,
-                                                        })
-                                                        setActiveInlineDropdown(null)
-                                                    }}
-                                                    className={clsx(
-                                                        'flex w-full items-center justify-between px-3 py-2 text-sm',
-                                                        active ? 'bg-hover text-text-primary' : 'bg-surface-raised text-text-secondary hover:bg-hover hover:text-text-primary',
-                                                    )}
-                                                    role="option"
-                                                    aria-selected={active}
-                                                >
-                                                    <span>{item.label}</span>
-                                                    <span className="text-xs text-text-muted">{item.value === 'off' ? 'off' : 'on'}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                )}
+                                    {isThinkingProtocolOpen && (
+                                        <div
+                                            className="absolute bottom-full right-0 z-20 mb-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-surface-alt shadow-[0_8px_24px_rgba(15,23,42,0.10)]"
+                                            role="listbox"
+                                            aria-label="Thinking protocol options"
+                                        >
+                                            {thinkingProtocolOptions.map((item) => {
+                                                const active = item.value === thinkingConfig.protocol
+                                                return (
+                                                    <button
+                                                        key={item.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            updateThinkingConfig({
+                                                                protocol: item.value,
+                                                                enabled: item.value === 'off' ? false : thinkingConfig.enabled,
+                                                            })
+                                                            setActiveInlineDropdown(null)
+                                                        }}
+                                                        className={clsx(
+                                                            'flex w-full items-center justify-between px-3 py-2 text-sm',
+                                                            active ? 'bg-settings-card-active text-text-primary' : 'bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                        )}
+                                                        role="option"
+                                                        aria-selected={active}
+                                                    >
+                                                        <span>{item.label}</span>
+                                                        <span className="text-xs text-text-muted">{item.value === 'off' ? 'off' : 'on'}</span>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-text-primary">Thinking level</h3>
-                            <p className="mt-0.5 text-xs text-text-secondary">思考强度</p>
-                        </div>
-                        <div ref={thinkingLevelDropdownRef} className="relative w-[128px] shrink-0">
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!thinkingProtocolSelected) return
-                                        toggleInlineDropdown('thinkingLevel')
-                                    }}
-                                    className={`flex w-full items-center justify-between rounded-2xl border border-border bg-surface-raised px-3 py-2 text-sm shadow-sm ${
-                                        !thinkingProtocolSelected ? 'cursor-not-allowed opacity-50' : ''
-                                    }`}
-                                    aria-haspopup="listbox"
-                                    aria-expanded={isThinkingLevelOpen}
-                                    aria-label="Thinking level"
-                                    disabled={!thinkingProtocolSelected}
-                                >
-                                    <div className="flex w-full min-w-0 items-center justify-between pr-2">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-semibold text-text-primary">Thinking level</div>
+                                    <div className="mt-0.5 text-xs text-text-secondary">思考强度</div>
+                                </div>
+                                <div ref={thinkingLevelDropdownRef} className="relative w-[132px] shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!thinkingProtocolSelected) return
+                                            toggleInlineDropdown('thinkingLevel')
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.06)] ${
+                                            !thinkingProtocolSelected ? 'cursor-not-allowed opacity-50' : ''
+                                        }`}
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isThinkingLevelOpen}
+                                        aria-label="Thinking level"
+                                        disabled={!thinkingProtocolSelected}
+                                    >
                                         <span className="truncate text-text-primary">{selectedThinkingLevel.label}</span>
                                         <span className="text-xs text-text-muted">{thinkingProtocolSelected ? 'on' : 'off'}</span>
-                                    </div>
-                                    <ChevronDown className="size-4 text-text-muted"/>
-                                </button>
+                                        <ChevronDown className="size-4 text-text-muted"/>
+                                    </button>
 
-                                {isThinkingLevelOpen && thinkingProtocolSelected && (
-                                    <div
-                                        className="absolute bottom-full right-0 z-20 mb-2 max-h-56 w-full overflow-auto rounded-2xl border border-border bg-surface-raised shadow-sm"
-                                        role="listbox"
-                                        aria-label="Thinking level options"
-                                    >
-                                        {thinkingLevelOptions.map((item) => {
-                                            const active = item.value === thinkingConfig.level
-                                            return (
-                                                <button
-                                                    key={item.value}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        updateThinkingConfig({level: item.value})
-                                                        setActiveInlineDropdown(null)
-                                                    }}
-                                                    className={clsx(
-                                                        'flex w-full items-center justify-between px-3 py-2 text-sm',
-                                                        active ? 'bg-hover text-text-primary' : 'bg-surface-raised text-text-secondary hover:bg-hover hover:text-text-primary',
-                                                    )}
-                                                    role="option"
-                                                    aria-selected={active}
-                                                >
-                                                    <span>{item.label}</span>
-                                                    <span className="text-xs text-text-muted">{item.value}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                )}
+                                    {isThinkingLevelOpen && thinkingProtocolSelected && (
+                                        <div
+                                            className="absolute bottom-full right-0 z-20 mb-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-surface-alt shadow-[0_8px_24px_rgba(15,23,42,0.10)]"
+                                            role="listbox"
+                                            aria-label="Thinking level options"
+                                        >
+                                            {thinkingLevelOptions.map((item) => {
+                                                const active = item.value === thinkingConfig.level
+                                                return (
+                                                    <button
+                                                        key={item.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            updateThinkingConfig({level: item.value})
+                                                            setActiveInlineDropdown(null)
+                                                        }}
+                                                        className={clsx(
+                                                            'flex w-full items-center justify-between px-3 py-2 text-sm',
+                                                            active ? 'bg-settings-card-active text-text-primary' : 'bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                        )}
+                                                        role="option"
+                                                        aria-selected={active}
+                                                    >
+                                                        <span>{item.label}</span>
+                                                        <span className="text-xs text-text-muted">{item.value}</span>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </section>
+                </div>
                 </div>
 
                 {isContextPanelOpen && (
-                    <div className="absolute inset-0 z-20 flex flex-col bg-surface-alt px-6 py-4">
+                    <div className="settings-scrollbar-hidden absolute inset-0 z-20 flex flex-col overflow-y-auto bg-surface-alt px-4 py-4">
                         <div className="flex items-center justify-between border-b border-border pb-3">
                             <div>
                                 <span className="text-base font-semibold text-text-primary">Assistant context</span>
@@ -977,10 +973,10 @@ export function SettingsDrawer({
                                             type="button"
                                             onClick={() => handleSelectContextFile(file.name)}
                                             className={clsx(
-                                                'rounded-2xl border px-3 py-3 text-left transition-colors',
+                                                'rounded-xl border px-3 py-3 text-left transition-colors',
                                                 active
-                                                    ? 'border-text-primary bg-surface-raised text-text-primary'
-                                                    : 'border-border bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                    ? 'border-text-primary bg-settings-card-active text-text-primary'
+                                                    : 'border-border bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
                                             )}
                                         >
                                             <div className="text-sm font-semibold">{file.title}</div>
@@ -990,7 +986,7 @@ export function SettingsDrawer({
                                 })}
                             </div>
 
-                            <div className="rounded-2xl border border-border bg-surface-raised p-4">
+                            <div className="rounded-xl border border-border bg-surface-alt p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0 text-sm font-semibold text-text-primary">
                                         {selectedManagedFile ? selectedManagedFile : EDITABLE_CONTEXT_FILES.find((file) => file.name === selectedContextFile)?.title}
@@ -1014,11 +1010,11 @@ export function SettingsDrawer({
                                 )}
 
                                 {contextLoading ? (
-                                    <div className="mt-4 rounded-xl border border-border bg-surface px-3 py-8 text-sm text-text-secondary">
+                                    <div className="mt-4 rounded-xl border border-border bg-surface-alt px-3 py-8 text-sm text-text-secondary">
                                         正在加载上下文文件...
                                     </div>
                                 ) : selectedManagedFile ? (
-                                    <pre className="mt-4 min-h-[16rem] overflow-auto rounded-xl border border-border bg-surface px-3 py-3 text-xs leading-6 text-text-primary">
+                                    <pre className="mt-4 min-h-[16rem] overflow-auto rounded-xl border border-border bg-surface-alt px-3 py-3 text-xs leading-6 text-text-primary">
                                         {contextFiles[selectedManagedFile]?.content || '(empty)'}
                                     </pre>
                                 ) : (
@@ -1033,7 +1029,7 @@ export function SettingsDrawer({
                                             setContextError(null)
                                         }}
                                         placeholder="在这里编辑上下文内容..."
-                                        className="mt-4 min-h-[16rem] w-full resize-none rounded-xl border border-border bg-surface px-3 py-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                        className="mt-4 min-h-[16rem] w-full resize-none rounded-xl border border-border bg-surface-alt px-3 py-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
                                         spellCheck
                                     />
                                 )}
@@ -1057,7 +1053,7 @@ export function SettingsDrawer({
                                                     setMemorySaveStatus('Editing')
                                                 }}
                                                 placeholder="http://127.0.0.1:8000/v1"
-                                                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                                className="w-full rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
                                             />
                                         </div>
 
@@ -1074,12 +1070,12 @@ export function SettingsDrawer({
                                                     }))
                                                     setMemorySaveStatus('Editing')
                                                 }}
-                                                className="w-28 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                                className="w-28 rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
                                             />
                                         </div>
 
                                         {selectedMemoryFile ? (
-                                            <div className="rounded-xl border border-border bg-surface p-3">
+                                            <div className="rounded-xl border border-border bg-surface-alt p-3">
                                                 <div className="mb-3 flex items-center justify-between gap-3">
                                                     <button
                                                         type="button"
@@ -1098,7 +1094,7 @@ export function SettingsDrawer({
                                                 </pre>
                                             </div>
                                         ) : (
-                                            <div className="rounded-xl border border-border bg-surface p-3">
+                                            <div className="rounded-xl border border-border bg-surface-alt p-3">
                                                 <div className="mb-2 text-xs text-text-secondary">Memory logs (read-only) · {memoryFiles.length}</div>
                                                 <div className="max-h-52 space-y-2 overflow-auto">
                                                     {memoryFiles.map((file) => (
@@ -1133,8 +1129,8 @@ export function SettingsDrawer({
                                                     className={clsx(
                                                         'rounded-full border px-3 py-1.5 text-xs transition-colors',
                                                         active
-                                                            ? 'border-text-primary bg-surface-alt text-text-primary'
-                                                            : 'border-border bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                            ? 'border-text-primary bg-settings-card-active text-text-primary'
+                                                            : 'border-border bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
                                                     )}
                                                 >
                                                     {file.title}
@@ -1155,7 +1151,7 @@ export function SettingsDrawer({
                 )}
 
                 {isModelPanelOpen && (
-                    <div className="absolute inset-0 z-20 flex flex-col bg-surface-alt px-6 py-4">
+                    <div className="settings-scrollbar-hidden absolute inset-0 z-20 flex flex-col overflow-y-auto bg-surface-alt px-4 py-4">
                         <div className="flex items-center justify-between border-b border-border pb-3">
                             <span className="text-base font-semibold text-text-primary">Model selection</span>
                             <button
@@ -1173,7 +1169,7 @@ export function SettingsDrawer({
                                 <button
                                     type="button"
                                     onClick={() => setIsModelOptionsOpen((prev) => !prev)}
-                                    className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none"
+                                    className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none"
                                     aria-haspopup="listbox"
                                     aria-expanded={isModelOptionsOpen}
                                     aria-label="Model preset"
@@ -1188,7 +1184,7 @@ export function SettingsDrawer({
 
                                 {isModelOptionsOpen && (
                                     <div
-                                        className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-surface shadow-sm"
+                                        className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-surface-alt shadow-sm"
                                         role="listbox"
                                         aria-label="Model preset options"
                                     >
@@ -1201,8 +1197,8 @@ export function SettingsDrawer({
                                             className={clsx(
                                                 'flex w-full items-center px-3 py-2 text-left text-sm',
                                                 selectedModelPresetId === NEW_MODEL_PRESET_VALUE
-                                                    ? 'bg-hover text-text-primary'
-                                                    : 'bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                    ? 'bg-settings-card-active text-text-primary'
+                                                    : 'bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
                                             )}
                                             role="option"
                                             aria-selected={selectedModelPresetId === NEW_MODEL_PRESET_VALUE}
@@ -1220,8 +1216,8 @@ export function SettingsDrawer({
                                                 className={clsx(
                                                     'flex w-full items-center px-3 py-2 text-left text-sm',
                                                     selectedModelPresetId === item.id
-                                                        ? 'bg-hover text-text-primary'
-                                                        : 'bg-surface text-text-secondary hover:bg-hover hover:text-text-primary',
+                                                        ? 'bg-settings-card-active text-text-primary'
+                                                        : 'bg-surface-alt text-text-secondary hover:bg-hover hover:text-text-primary',
                                                 )}
                                                 role="option"
                                                 aria-selected={selectedModelPresetId === item.id}
@@ -1234,18 +1230,20 @@ export function SettingsDrawer({
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <div className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm">
-                                    {draftModel ? (
-                                        <span className="text-text-primary">{draftModel}</span>
-                                    ) : (
-                                        <span className="text-text-secondary/60">点击连接获取 model name</span>
-                                    )}
-                                </div>
+                                <input
+                                    value={draftModel}
+                                    onChange={(e) => {
+                                        setDraftModel(e.target.value)
+                                        setModelSaveStatus('Editing')
+                                    }}
+                                    placeholder="model name"
+                                    className="flex-1 rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                />
                                 <button
                                     type="button"
                                     onClick={() => void handleConnectModel()}
                                     disabled={modelsLoading || !draftBaseUrl.trim()}
-                                    className="shrink-0 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="shrink-0 rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {modelsLoading ? '连接中...' : '连接'}
                                 </button>
@@ -1273,7 +1271,7 @@ export function SettingsDrawer({
                                     setModelsError(null)
                                 }}
                                 placeholder="baseUrl"
-                                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                className="w-full rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
                             />
                             <input
                                 value={draftApiKey}
@@ -1283,7 +1281,7 @@ export function SettingsDrawer({
                                     setModelsError(null)
                                 }}
                                 placeholder="apiKey"
-                                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
+                                className="w-full rounded-xl border border-border bg-surface-alt px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-[color:var(--border-strong)]"
                             />
 
                             <div className="mt-auto text-xs text-text-muted">
@@ -1293,6 +1291,7 @@ export function SettingsDrawer({
                     </div>
                 )}
 
+                </div>
             </div>
         </div>
     )

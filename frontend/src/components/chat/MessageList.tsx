@@ -201,8 +201,8 @@ export function MessageList({
       onWheel={markUserInteraction}
       onTouchMove={markUserInteraction}
       className={wideLayout
-        ? 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-6'
-        : 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto px-4 pt-6 pb-28 md:px-2'}
+        ? 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto pl-4 pr-0 pt-6 pb-28 md:pl-6'
+        : 'chat-scroll-mask chat-scrollbar flex h-full w-full flex-col gap-3 overflow-y-auto pl-4 pr-0 pt-6 pb-28 md:pl-2'}
       style={{
         WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 28px), transparent 100%)',
         maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 28px), transparent 100%)',

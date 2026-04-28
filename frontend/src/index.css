@@ -35,6 +35,7 @@
     --color-sidebar-panel: #F8F8F6;         /* 左侧边栏展开底色 · ConversationSidebar 展开态 */
     --color-sidebar-hover: #EFEEEB;         /* 侧栏项 hover 底色 · 会话列表项 / 设置列表项 */
     --color-sidebar-active: #EFEEEB;        /* 侧栏项选中底色 · 当前会话 / 当前设置项 */
+    --color-settings-card-active: #f4f4f1;  /* 设置面板卡片 / 下拉项选中底色 */
     --color-browser-theme: #f6f6f7;         /* 浏览器壳 tint · Claude in Chrome 入口提示条 */
     --color-user-bubble: #EFEEEB;           /* 用户消息气泡底色 · MessageItem 用户角色背景 */
 
@@ -103,6 +104,7 @@
     --color-sidebar-panel: #181818;            /* 暗色左侧边栏底色 rgb(24, 24, 24) · ConversationSidebar */
     --color-sidebar-hover: #242424;            /* 暗色侧栏项 hover */
     --color-sidebar-active: #303030;           /* 暗色选中色 rgb(48, 48, 48) · 会话选中 / 设置卡片选中 */
+    --color-settings-card-active: #303030;     /* 暗色设置面板卡片 / 下拉项选中底色 */
     --color-browser-theme: #1f1f1f;            /* 暗色浏览器壳 tint */
     --color-user-bubble: #303030;              /* 暗色用户气泡底色 rgb(48, 48, 48) · MessageItem 用户角色 */
     --color-text-primary: #ececec;             /* 暗色主文字 · 标题 / 正文 */
@@ -251,22 +253,31 @@ select:focus-visible {
 }
 
 .chat-scrollbar::-webkit-scrollbar {
-    width: 8px;
+    width: 4px;
 }
 
 .chat-scrollbar::-webkit-scrollbar-track {
-    background: transparent;              /* WebKit 滚动条轨道 · 完全透明 */
+    background: transparent;
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--color-text-muted) 45%, transparent); /* WebKit 滑块默认色 · 最淡灰 45% 透明 */
-    border-radius: 9999px;
-    border: 2px solid transparent;        /* 滑块外描边占位，用 padding-box clip 缩窄视觉宽度 */
-    background-clip: padding-box;
+    background: color-mix(in oklab, var(--color-text-muted) 45%, transparent);
 }
 
 .chat-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--color-text-muted) 65%, transparent); /* WebKit 滑块 hover · 最淡灰 65% 透明（更明显） */
+    background: color-mix(in oklab, var(--color-text-muted) 65%, transparent);
+}
+
+/* 设置栏：允许滚动，但不显示滚动条 */
+.settings-scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.settings-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 /* 数字输入框统一隐藏浏览器自带步进箭头 */
@@ -467,6 +478,14 @@ input[type="number"] {
     letter-spacing: 0.01em;
 }
 
+/*
+ * 复制按钮容器：始终保持 pointer-events: auto（继承默认值），不再随 :hover 切换。
+ * 原因：流式输出（isAnimating=true）期间 React 频繁 patch DOM，浏览器的 :hover 状态机
+ * 易在两次 hit-test 之间短暂失效，若把 pointer-events 绑定在 :hover 上会导致点击穿透 ——
+ * 用户看到按钮、点下去却没反应。
+ * 视觉上的显示/隐藏仍由 :hover / :focus-within 通过 opacity + transform 渐变控制，
+ * 不可见时仍可点击是可接受的代价（命中区只有右上角小块）。
+ */
 .streamdown-markdown [data-streamdown="code-block"] > [data-streamdown="code-block-header"] + div {
     position: absolute;
     top: 0.5rem;
@@ -477,14 +496,12 @@ input[type="number"] {
     opacity: 0;
     transform: translateY(-1px);
     transition: opacity 140ms ease, transform 140ms ease;
-    pointer-events: none;
 }
 
 .streamdown-markdown [data-streamdown="code-block"]:hover > [data-streamdown="code-block-header"] + div,
 .streamdown-markdown [data-streamdown="code-block"]:focus-within > [data-streamdown="code-block-header"] + div {
     opacity: 1;
     transform: translateY(0);
-    pointer-events: auto;
 }
 
 .streamdown-markdown [data-streamdown="code-block-actions"] {
