@@ -7,8 +7,6 @@ import type { MemoryItemRow } from '../sqlite-store.js'
 import { buildMemoryRecallMessages, promptInjectorDeps } from '../prompt-injector.js'
 
 type PromptInjectorDeps = {
-  getPool: typeof promptInjectorDeps.getPool
-  searchEventMemories: typeof promptInjectorDeps.searchEventMemories
   searchForRecall: typeof promptInjectorDeps.searchForRecall
   deriveProjectId: typeof promptInjectorDeps.deriveProjectId
   formatMemoryRecallBlock: typeof promptInjectorDeps.formatMemoryRecallBlock
@@ -25,7 +23,7 @@ function createMemoryRow(overrides: Partial<MemoryItemRow> = {}): MemoryItemRow 
     sessionId: 'sess_sqlite',
     sessionKey: 'main',
     summary: 'SQLite 记忆召回已接入',
-    content: '用户要求优先使用 SQLite 召回，PG 仅保留 legacy fallback。',
+    content: '用户要求统一使用 SQLite 召回，并在未命中时回退到文件系统记忆。',
     tags: ['memory', 'sqlite'],
     importance: 8,
     confidence: 0.9,
@@ -46,18 +44,14 @@ async function withPatchedDeps(
 ): Promise<void> {
   const mutableDeps = promptInjectorDeps as PromptInjectorDeps
   const originalDeps: PromptInjectorDeps = {
-    getPool: mutableDeps.getPool,
-    searchEventMemories: mutableDeps.searchEventMemories,
     searchForRecall: mutableDeps.searchForRecall,
     deriveProjectId: mutableDeps.deriveProjectId,
     formatMemoryRecallBlock: mutableDeps.formatMemoryRecallBlock,
     loadMemoryInjectionText: mutableDeps.loadMemoryInjectionText,
     logger: mutableDeps.logger,
   }
-  const previousPgLegacy = process.env.MEMORY_PG_LEGACY
   const previousMemoryDisabled = process.env.LECQUY_MEMORY_DISABLED
 
-  delete process.env.MEMORY_PG_LEGACY
   delete process.env.LECQUY_MEMORY_DISABLED
 
   Object.assign(mutableDeps, patch)
@@ -66,11 +60,6 @@ async function withPatchedDeps(
     await run()
   } finally {
     Object.assign(mutableDeps, originalDeps)
-    if (previousPgLegacy === undefined) {
-      delete process.env.MEMORY_PG_LEGACY
-    } else {
-      process.env.MEMORY_PG_LEGACY = previousPgLegacy
-    }
     if (previousMemoryDisabled === undefined) {
       delete process.env.LECQUY_MEMORY_DISABLED
     } else {
@@ -81,10 +70,6 @@ async function withPatchedDeps(
 
 test('buildMemoryRecallMessages returns retrieved_memory block when SQLite recall hits', async () => {
   await withPatchedDeps({
-    getPool: () => ({}) as never,
-    searchEventMemories: async () => {
-      throw new Error('PG legacy should not be called')
-    },
     deriveProjectId: () => 'github.com/lincheqingyu/Lecquy',
     searchForRecall: () => [
       createMemoryRow({ id: 'mem_sqlite_1', summary: 'SQLite 召回 1' }),
@@ -95,7 +80,6 @@ test('buildMemoryRecallMessages returns retrieved_memory block when SQLite recal
     loadMemoryInjectionText: async () => '',
   }, async () => {
     const messages = await buildMemoryRecallMessages({
-      pgEnabled: true,
       sessionId: 'session_test',
       sessionKey: 'session_test',
       userQuery: '最近关于 memory recall 的决定是什么？',
@@ -122,7 +106,6 @@ test('buildMemoryRecallMessages falls back to file system when SQLite recall mis
     loadMemoryInjectionText: async () => '来自文件系统的 recall',
   }, async () => {
     const messages = await buildMemoryRecallMessages({
-      pgEnabled: false,
       sessionId: 'session_test',
       userQuery: '回忆一下',
       workspaceDir: '/tmp/lecquy-memory-test',
@@ -138,15 +121,12 @@ test('buildMemoryRecallMessages falls back to file system when SQLite recall mis
 
 test('buildMemoryRecallMessages returns empty array when no recall content exists', async () => {
   await withPatchedDeps({
-    getPool: () => ({}) as never,
-    searchEventMemories: async () => [],
     deriveProjectId: () => 'github.com/lincheqingyu/Lecquy',
     searchForRecall: () => [],
     formatMemoryRecallBlock: () => '',
     loadMemoryInjectionText: async () => '',
   }, async () => {
     const messages = await buildMemoryRecallMessages({
-      pgEnabled: true,
       sessionId: 'session_test',
       sessionKey: 'session_test',
       userQuery: '没有任何 recall 吗',
@@ -166,7 +146,6 @@ test('buildMemoryRecallMessages always returns user-role messages', async () => 
     loadMemoryInjectionText: async () => '只要有 recall 就应该是 user role',
   }, async () => {
     const messages = await buildMemoryRecallMessages({
-      pgEnabled: false,
       sessionId: 'session_test',
       userQuery: '检查 role',
       workspaceDir: '/tmp/lecquy-memory-test',

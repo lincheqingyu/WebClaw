@@ -88,11 +88,8 @@ import {
   resolveRuntimePaths,
 } from '../core/runtime-paths.js'
 import { clearCurrentToolSessionKey, setCurrentToolSessionKey } from '../agent/tools/session-tools/index.js'
-import { getPool } from '../db/client.js'
-import { deleteRuntimeSession, syncRuntimeSession } from '../db/runtime-session-repository.js'
 import { applyCompactionIfNeeded } from '../memory/compact.js'
 import { extractAndPersistOnTurnComplete } from '../memory/coordinator.js'
-import { syncTodosToForesight } from '../memory/foresight-sync.js'
 import { buildMemoryRecallBlockLegacy, buildMemoryRecallMessages } from '../memory/prompt-injector.js'
 import { buildAugmentedContext } from './context/augmented-context-builder.js'
 import {
@@ -742,7 +739,6 @@ export class SessionRuntimeService {
   private readonly runtimePaths: RuntimePaths
   private readonly paths: ReturnType<typeof createSessionStorePaths>
   private readonly projections = new Map<string, SessionProjection>()
-  private readonly pgSyncState = new Map<string, { eventCount: number; updatedAt: number; title: string | null; mode: string | null }>()
   private readonly managers = new Map<string, SessionManager>()
   private readonly notifiers = new Map<string, Set<NotifierFn>>()
   private readonly activeRuns = new Map<string, ActiveRunHandle>()
@@ -967,7 +963,6 @@ export class SessionRuntimeService {
     const nextProjection = snapshot.projection
     this.projections.set(sessionKey, nextProjection)
     await this.persistIndex()
-    await this.syncProjectionToPg(nextProjection, manager)
 
     if (nextProjection.title && nextProjection.title !== beforeTitle) {
       this.notify(sessionKey, 'session_title_updated', {
@@ -978,39 +973,6 @@ export class SessionRuntimeService {
       })
     }
     return nextProjection
-  }
-
-  private async syncProjectionToPg(projection: SessionProjection, manager: SessionManager): Promise<void> {
-    if (!this.cfg.PG_ENABLED) return
-    const eventCount = manager.getEntries().length
-    const nextState = {
-      eventCount,
-      updatedAt: projection.updatedAt,
-      title: projection.title ?? null,
-      mode: projection.workflow?.mode ?? null,
-    }
-    const previousState = this.pgSyncState.get(projection.key)
-
-    if (
-      previousState
-      && previousState.eventCount === nextState.eventCount
-      && previousState.updatedAt === nextState.updatedAt
-      && previousState.title === nextState.title
-      && previousState.mode === nextState.mode
-    ) {
-      return
-    }
-
-    try {
-      await syncRuntimeSession(getPool(), projection, manager.getEntries())
-      this.pgSyncState.set(projection.key, nextState)
-    } catch (error) {
-      logger.error('runtime dual-write 失败，已保留文件链路', {
-        sessionKey: projection.key,
-        sessionId: projection.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
   }
 
   private async withLock<T>(sessionKey: string, task: () => Promise<T>): Promise<T> {
@@ -1196,23 +1158,10 @@ export class SessionRuntimeService {
       await rm(this.sessionFilePath(projection.sessionId), { force: true })
     }
     this.managers.delete(projection.key)
-    this.pgSyncState.delete(projection.key)
     this.skillSessions.delete(projection.sessionId)
     this.deleteSystemPromptSnapshots(projection.sessionId)
     this.sessionModes.delete(projection.sessionId)
     await this.persistIndex()
-
-    if (this.cfg.PG_ENABLED) {
-      try {
-        await deleteRuntimeSession(getPool(), projection.sessionId)
-      } catch (error) {
-        logger.error('runtime dual-write 删除失败，已保留本地删除结果', {
-          sessionKey: projection.key,
-          sessionId: projection.sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
 
     return true
   }
@@ -1568,7 +1517,6 @@ export class SessionRuntimeService {
     const useLayeredPrompt = process.env.LAYERED_PROMPT === 'true'
     if (useLayeredPrompt) {
       const recallMessages = await buildMemoryRecallMessages({
-        pgEnabled: this.cfg.PG_ENABLED,
         sessionId: bound.projection.sessionId,
         sessionKey: bound.projection.key,
         userQuery,
@@ -1580,10 +1528,10 @@ export class SessionRuntimeService {
     }
 
     const memoryRecallBlock = await buildMemoryRecallBlockLegacy({
-      pgEnabled: this.cfg.PG_ENABLED,
       sessionId: bound.projection.sessionId,
       sessionKey: bound.projection.key,
       userQuery,
+      workspaceDir: this.runtimePaths.workspaceDir,
       mode,
       route: bound.projection.route,
     })
@@ -2069,13 +2017,7 @@ export class SessionRuntimeService {
     const persistTodoState = async (emitEvent = true): Promise<SerializedTodoItem[]> => {
       const items = todoManager.getItems().map((item) => ({ ...item }))
       bound.manager.appendTodoUpdated(runId, items)
-      const latestProjection = await this.refreshProjection(sessionKey)
-      await syncTodosToForesight({
-        pgEnabled: this.cfg.PG_ENABLED,
-        projection: latestProjection,
-        runId,
-        items,
-      })
+      await this.refreshProjection(sessionKey)
 
       if (emitEvent) {
         this.notify(sessionKey, 'todo_state', {

@@ -392,7 +392,7 @@ export function RuntimeMode({
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [memoryDraftConfig, setMemoryDraftConfig] =
-    useState<MemoryRuntimeConfig>({ flushTurns: 20, embeddingBaseUrl: '' })
+    useState<MemoryRuntimeConfig>({ embeddingBaseUrl: '' })
   const [memoryFiles, setMemoryFiles] = useState<MemoryFileMeta[]>([])
   const [memorySaveStatus, setMemorySaveStatus] = useState<'Saved' | 'Editing'>('Saved')
   const [memoryError, setMemoryError] = useState<string | null>(null)
@@ -1276,21 +1276,6 @@ export function RuntimeMode({
                 setMemoryError(null)
               }}
               placeholder="http://127.0.0.1:8000/v1"
-            />
-          </RightRailListItem>
-          <RightRailListItem label="Flush turns">
-            <RuntimeTextInput
-              type="number"
-              value={String(memoryDraftConfig.flushTurns)}
-              onChange={(value) => {
-                setMemoryDraftConfig((prev) => ({
-                  ...prev,
-                  flushTurns: Number(value || 1),
-                }))
-                setMemorySaveStatus('Editing')
-                setMemoryError(null)
-              }}
-              placeholder="20"
             />
           </RightRailListItem>
           <RightRailListItem label="memory.db">

@@ -10,7 +10,6 @@ import { listMemoryFiles, readMemoryFile } from '../memory/store.js'
 const router: RouterType = Router()
 
 const updateConfigSchema = z.object({
-  flushTurns: z.number().int().min(1).optional(),
   embeddingBaseUrl: z.string().url().or(z.literal('')).optional(),
 })
 

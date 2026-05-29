@@ -30,8 +30,6 @@ import { logger } from './utils/logger.js'
 import { initChatWebSocketServer } from './ws/chat-ws.js'
 import { createSessionRuntimeService } from './runtime/index.js'
 import { initializeSessionTools } from './agent/tools/index.js'
-import { closePool, getPool } from './db/client.js'
-import { runMigrations } from './db/migrate.js'
 
 /** 优雅关闭超时（毫秒） */
 const SHUTDOWN_TIMEOUT = 30_000
@@ -40,24 +38,15 @@ async function main(): Promise<void> {
   // 1. 加载并校验配置
   const config = loadConfig()
 
-  // 2. 可选初始化 PostgreSQL 底座
-  if (config.PG_ENABLED) {
-    logger.info('PostgreSQL 已启用，正在执行 migration...')
-    await runMigrations(getPool())
-    logger.info('PostgreSQL 初始化完成')
-  } else {
-    logger.info('PostgreSQL 未启用，继续使用文件持久化链路')
-  }
-
-  // 3. 创建 Express 应用
+  // 2. 创建 Express 应用
   const app = createApp()
   const server = createServer(app)
 
-  // 4. 创建会话服务并绑定 session tools
+  // 3. 创建会话服务并绑定 session tools
   const sessionRuntime = await createSessionRuntimeService()
   initializeSessionTools(sessionRuntime)
 
-  // 5. 初始化 WebSocket（传入 registry）
+  // 4. 初始化 WebSocket（传入 registry）
   const wss = initChatWebSocketServer(server, sessionRuntime)
 
   server.on('error', (error) => {
@@ -70,7 +59,7 @@ async function main(): Promise<void> {
     process.exit(1)
   })
 
-  // 6. 启动服务器
+  // 5. 启动服务器
   const displayHost = config.HOST === '0.0.0.0' ? 'localhost' : config.HOST
   server.listen(config.BACKEND_PORT, config.HOST, () => {
     logger.info(`服务器已启动: http://${displayHost}:${config.BACKEND_PORT}`)
@@ -78,7 +67,7 @@ async function main(): Promise<void> {
     logger.info(`日志: ${config.LOG_LEVEL}`)
   })
 
-  // 7. 优雅关闭
+  // 6. 优雅关闭
   let isShuttingDown = false
 
   const shutdown = async (signal: string) => {
@@ -101,10 +90,6 @@ async function main(): Promise<void> {
 
     try {
       await sessionRuntime.shutdown()
-
-      if (config.PG_ENABLED) {
-        await closePool()
-      }
     } catch (error) {
       clearTimeout(forceTimer)
       logger.error('优雅关闭失败', error)

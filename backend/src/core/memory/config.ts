@@ -6,12 +6,10 @@ import { promises as fs } from 'node:fs'
 import { ensureMemoryConfigLocation, resolvePromptContextPaths } from '../prompts/context-files.js'
 
 export interface MemoryConfig {
-  flushTurns: number
   embeddingBaseUrl: string
 }
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
-  flushTurns: 20,
   embeddingBaseUrl: '',
 }
 
@@ -19,10 +17,6 @@ let cachedConfig: MemoryConfig | null = null
 
 function normalizeConfig(input: Partial<MemoryConfig> | null | undefined): MemoryConfig {
   return {
-    flushTurns:
-      typeof input?.flushTurns === 'number' && Number.isFinite(input.flushTurns) && input.flushTurns > 0
-        ? Math.floor(input.flushTurns)
-        : DEFAULT_MEMORY_CONFIG.flushTurns,
     embeddingBaseUrl: typeof input?.embeddingBaseUrl === 'string' ? input.embeddingBaseUrl.trim() : '',
   }
 }

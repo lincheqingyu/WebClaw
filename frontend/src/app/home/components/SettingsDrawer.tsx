@@ -384,7 +384,7 @@ export function SettingsDrawer({
     const [modelsLoading, setModelsLoading] = useState(false)
     const [modelsError, setModelsError] = useState<string | null>(null)
     const [memoryDraftConfig, setMemoryDraftConfig] =
-        useState<MemoryRuntimeConfig>({flushTurns: 20, embeddingBaseUrl: ''})
+        useState<MemoryRuntimeConfig>({embeddingBaseUrl: ''})
     const [memoryFiles, setMemoryFiles] = useState<MemoryFileMeta[]>([])
     const [memorySaveStatus, setMemorySaveStatus] = useState<'Saved' | 'Editing'>('Saved')
     const [memoryError, setMemoryError] = useState<string | null>(null)
@@ -1159,21 +1159,6 @@ export function SettingsDrawer({
                                     setMemoryError(null)
                                 }}
                                 placeholder="http://127.0.0.1:8000/v1"
-                            />
-                        </SettingRow>
-                        <SettingRow label="Flush turns">
-                            <UnderlineInput
-                                type="number"
-                                value={String(memoryDraftConfig.flushTurns)}
-                                onChange={(value) => {
-                                    setMemoryDraftConfig((prev) => ({
-                                        ...prev,
-                                        flushTurns: Number(value || 1),
-                                    }))
-                                    setMemorySaveStatus('Editing')
-                                    setMemoryError(null)
-                                }}
-                                placeholder="20"
                             />
                         </SettingRow>
                         <SettingRow label="memory.db">

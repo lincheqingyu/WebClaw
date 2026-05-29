@@ -20,7 +20,6 @@ export interface ContextFileRecord {
 }
 
 export interface MemoryRuntimeConfig {
-  flushTurns: number
   embeddingBaseUrl: string
 }
 
