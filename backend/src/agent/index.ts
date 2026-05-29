@@ -5,7 +5,7 @@
  * Agent 模块统一导出
  */
 
-export { runSimpleAgent, type SimpleAgentOptions, type SimpleAgentResult, type TurnState } from './agent-runner.js'
+export { runSimpleAgent, type SimpleAgentOptions, type SimpleAgentResult } from './agent-runner.js'
 export {
   runManagerAgent,
   handleWorkerReceipt,

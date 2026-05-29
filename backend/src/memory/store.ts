@@ -27,10 +27,6 @@ function formatDate(date = new Date()): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export function getDailyMemoryFilePath(date = new Date()): string {
-  return path.join(getMemoryDir(), `memory-${formatDate(date)}.md`)
-}
-
 function isMemoryFileName(name: string): boolean {
   return name === 'MEMORY.md' || /^memory\/memory-\d{4}-\d{2}-\d{2}\.md$/.test(name)
 }
@@ -65,15 +61,6 @@ export async function ensureMemoryFiles(workspaceDir?: string): Promise<void> {
   } catch {
     await fs.writeFile(paths.memoryFile, '', 'utf8')
   }
-}
-
-export async function appendDailyMemoryEntry(entry: string): Promise<void> {
-  if (!entry.trim()) return
-  await ensureMemoryFiles()
-  const dailyPath = getDailyMemoryFilePath()
-  const timestamp = new Date().toISOString()
-  const block = `\n## ${timestamp}\n\n${entry.trim()}\n`
-  await fs.appendFile(dailyPath, block, 'utf8')
 }
 
 export async function loadMemorySummary(workspaceDir: string): Promise<string> {

@@ -5,14 +5,11 @@ export {
   ensureMemoryFiles,
   loadMemoryInjectionText,
   loadMemorySummary,
-  appendDailyMemoryEntry,
-  getDailyMemoryFilePath,
   getMemoryDir,
   getMainMemoryFilePath,
   listMemoryFiles,
   readMemoryFile,
 } from './store.js'
-export { recordMemoryTurnAndMaybeFlush, resetMemoryTurnCounter } from './flush.js'
 export {
   buildEventExtractionInput,
   createMemoryCoordinator,

@@ -27,15 +27,10 @@ import {
   MAX_TOOL_FAILURES,
 } from './types.js'
 import { logger } from '../utils/logger.js'
-import { ensureMemoryFiles, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
+import { ensureMemoryFiles } from '../memory/index.js'
 import type { ConfirmationBroker } from '../runtime/confirmation-broker.js'
 import { compactInLoop } from '../runtime/context/in-loop-compactor.js'
 import type { AiRequestPromptFrameMeta } from '../runtime/context/prompt-frame-builder.js'
-
-/** 记忆轮次计数状态（会话级） */
-export interface TurnState {
-  counter: number
-}
 
 /** Simple Agent 运行参数 */
 export interface SimpleAgentOptions {
@@ -55,7 +50,6 @@ export interface SimpleAgentOptions {
   signal?: AbortSignal
   onEvent?: (event: AgentRuntimeEvent) => void
   contextMessages?: AgentMessage[]
-  turnState?: TurnState
   enableTools?: boolean
   route?: SessionRouteContext
   mode?: SessionMode
@@ -95,7 +89,6 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
     signal,
     onEvent,
     contextMessages = [],
-    turnState,
     enableTools = false,
     disableLegacyMemoryFlush = false,
     sessionKey,
@@ -251,8 +244,5 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
     })
   }
 
-  if (!disableLegacyMemoryFlush) {
-    await recordMemoryTurnAndMaybeFlush(mergedMessages, turnState)
-  }
   return { messages: mergedMessages }
 }
