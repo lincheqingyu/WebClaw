@@ -6,12 +6,12 @@ import test from 'node:test'
 import type { Model } from '@mariozechner/pi-ai'
 import { inferProviderFlavor, mutateProviderPayload } from './provider-payload.js'
 
-function createModel(baseUrl: string): Model<'openai-completions'> {
+function createModel(baseUrl: string, provider = 'openai'): Model<'openai-completions'> {
   return {
     id: 'test-model',
     name: 'test-model',
     api: 'openai-completions',
-    provider: 'openai',
+    provider,
     baseUrl,
     reasoning: false,
     input: ['text'],
@@ -25,7 +25,9 @@ function createModel(baseUrl: string): Model<'openai-completions'> {
 test('inferProviderFlavor detects bigmodel and local vllm endpoints', () => {
   assert.equal(inferProviderFlavor('https://open.bigmodel.cn/api/paas/v4/'), 'bigmodel')
   assert.equal(inferProviderFlavor('http://127.0.0.1:8000/v1'), 'vllm')
-  assert.equal(inferProviderFlavor('https://example.com/v1'), 'other')
+  assert.equal(inferProviderFlavor('https://api.anthropic.com/v1/messages'), 'anthropic')
+  assert.equal(inferProviderFlavor('https://example.com/v1', 'anthropic'), 'anthropic')
+  assert.equal(inferProviderFlavor('https://example.com/v1'), 'openai_compatible')
 })
 
 test('mutateProviderPayload enables tool_stream for bigmodel requests with tools', () => {
@@ -34,9 +36,14 @@ test('mutateProviderPayload enables tool_stream for bigmodel requests with tools
     tools: [{ type: 'function' }],
   }
 
-  mutateProviderPayload(createModel('https://open.bigmodel.cn/api/paas/v4/'), payload)
+  const result = mutateProviderPayload(createModel('https://open.bigmodel.cn/api/paas/v4/'), payload)
 
   assert.equal(payload.tool_stream, true)
+  assert.deepEqual(result, {
+    providerFlavor: 'bigmodel',
+    payloadMutationApplied: true,
+    cacheControlApplied: false,
+  })
 })
 
 test('mutateProviderPayload enables tool_stream for local vllm requests with tools', () => {
@@ -45,9 +52,14 @@ test('mutateProviderPayload enables tool_stream for local vllm requests with too
     tools: [{ type: 'function' }],
   }
 
-  mutateProviderPayload(createModel('http://127.0.0.1:8000/v1'), payload)
+  const result = mutateProviderPayload(createModel('http://127.0.0.1:8000/v1'), payload)
 
   assert.equal(payload.tool_stream, true)
+  assert.deepEqual(result, {
+    providerFlavor: 'vllm',
+    payloadMutationApplied: true,
+    cacheControlApplied: false,
+  })
 })
 
 test('mutateProviderPayload keeps generic openai-compatible requests unchanged', () => {
@@ -56,7 +68,87 @@ test('mutateProviderPayload keeps generic openai-compatible requests unchanged',
     tools: [{ type: 'function' }],
   }
 
-  mutateProviderPayload(createModel('https://example.com/v1'), payload)
+  const before = structuredClone(payload)
+  const result = mutateProviderPayload(createModel('https://example.com/v1'), payload)
 
   assert.equal(payload.tool_stream, undefined)
+  assert.deepEqual(payload, before)
+  assert.deepEqual(result, {
+    providerFlavor: 'openai_compatible',
+    payloadMutationApplied: false,
+    cacheControlApplied: false,
+  })
+  assert.equal(JSON.stringify(payload).includes('cache_control'), false)
+})
+
+test('mutateProviderPayload adds cache_control only for anthropic system payload', () => {
+  const messages = [
+    { role: 'user', content: '<retrieved_memory>memory</retrieved_memory>' },
+    { role: 'user', content: '<system_prompt_update>update</system_prompt_update>' },
+    { role: 'user', content: 'current input' },
+  ]
+  const payload: Record<string, unknown> = {
+    system: 'stable system prompt',
+    stream: true,
+    messages,
+  }
+
+  const result = mutateProviderPayload(createModel('https://api.anthropic.com/v1/messages', 'anthropic'), payload)
+
+  assert.deepEqual(result, {
+    providerFlavor: 'anthropic',
+    payloadMutationApplied: true,
+    cacheControlApplied: true,
+  })
+  assert.deepEqual(payload.system, [{
+    type: 'text',
+    text: 'stable system prompt',
+    cache_control: { type: 'ephemeral' },
+  }])
+  assert.equal(payload.messages, messages)
+  assert.deepEqual(payload.messages, [
+    { role: 'user', content: '<retrieved_memory>memory</retrieved_memory>' },
+    { role: 'user', content: '<system_prompt_update>update</system_prompt_update>' },
+    { role: 'user', content: 'current input' },
+  ])
+})
+
+test('mutateProviderPayload keeps existing anthropic cache_control idempotent', () => {
+  const systemBlock = {
+    type: 'text',
+    text: 'stable system prompt',
+    cache_control: { type: 'ephemeral' },
+  }
+  const payload: Record<string, unknown> = {
+    system: [systemBlock],
+    stream: true,
+    messages: [{ role: 'user', content: 'current input' }],
+  }
+
+  const result = mutateProviderPayload(createModel('https://api.anthropic.com/v1/messages', 'anthropic'), payload)
+
+  assert.deepEqual(result, {
+    providerFlavor: 'anthropic',
+    payloadMutationApplied: false,
+    cacheControlApplied: true,
+  })
+  assert.deepEqual(payload.system, [systemBlock])
+})
+
+test('mutateProviderPayload does not report cache_control when anthropic system has no text block', () => {
+  const payload: Record<string, unknown> = {
+    system: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } }],
+    stream: true,
+    messages: [{ role: 'user', content: 'current input' }],
+  }
+  const before = structuredClone(payload)
+
+  const result = mutateProviderPayload(createModel('https://api.anthropic.com/v1/messages', 'anthropic'), payload)
+
+  assert.deepEqual(result, {
+    providerFlavor: 'anthropic',
+    payloadMutationApplied: false,
+    cacheControlApplied: false,
+  })
+  assert.deepEqual(payload, before)
 })

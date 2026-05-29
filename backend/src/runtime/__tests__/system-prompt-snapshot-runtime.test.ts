@@ -9,7 +9,11 @@ import test from 'node:test'
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core'
 import type { Env } from '../../config/index.js'
 import { ensurePromptContextFiles, resolvePromptContextPaths } from '../../core/prompts/context-files.js'
-import { SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE } from '../../core/prompts/system-prompt-snapshot.js'
+import {
+  SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+  buildFrozenSystemSnapshot,
+  isSystemPromptSnapshotEntryData,
+} from '../../core/prompts/system-prompt-snapshot.js'
 import { SessionManager } from '../pi-session-core/session-manager.js'
 import { SessionRuntimeService } from '../session-runtime-service.js'
 
@@ -140,6 +144,289 @@ test('runtime reuses one layered snapshot for repeated calls and restores it fro
 
     assert.equal(restoredPrompt, firstPrompt)
     assert.equal(snapshotEntriesAfterRestore.length, 1)
+  } finally {
+    if (previousLayeredPrompt === undefined) {
+      delete process.env.LAYERED_PROMPT
+    } else {
+      process.env.LAYERED_PROMPT = previousLayeredPrompt
+    }
+    if (previousWorkspaceRoot === undefined) {
+      delete process.env.LECQUY_WORKSPACE_ROOT
+    } else {
+      process.env.LECQUY_WORKSPACE_ROOT = previousWorkspaceRoot
+    }
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('runtime creates a fresh snapshot after compact and never restores pre-compact snapshot', async () => {
+  const previousLayeredPrompt = process.env.LAYERED_PROMPT
+  const previousWorkspaceRoot = process.env.LECQUY_WORKSPACE_ROOT
+  const workspaceDir = await createWorkspace()
+  const paths = resolvePromptContextPaths(workspaceDir)
+  const manager = new SessionManager({
+    cwd: workspaceDir,
+    sessionDir: path.join(workspaceDir, '.lecquy', 'sessions-test'),
+    persist: false,
+  })
+
+  try {
+    process.env.LAYERED_PROMPT = 'true'
+    process.env.LECQUY_WORKSPACE_ROOT = workspaceDir
+    await writeFile(paths.userFile, 'compact 前 USER 内容。', 'utf8')
+
+    const config = createTestConfig('.lecquy/sessions-test')
+    const service = new SessionRuntimeService(config)
+    const buildPrompt = getBuildRunSystemPrompt(service)
+    const request = {
+      sessionId: manager.getSessionId(),
+      manager,
+      role: 'simple' as const,
+      mode: 'simple' as const,
+      modelId: 'Qwen3',
+      thinkingLevel: 'medium' as const,
+      tools: [createMockTool('read_file', '读取文件')],
+      toolsEnabled: true,
+    }
+
+    const firstPrompt = await buildPrompt(request)
+    await writeFile(paths.userFile, 'compact 后被新 snapshot 吸收的 USER 内容。', 'utf8')
+    const stillCachedPrompt = await buildPrompt(request)
+    const keptId = manager.appendMessage({
+      role: 'user',
+      content: 'compact 后保留的尾部消息',
+      timestamp: Date.now(),
+    })
+    manager.appendCompaction('compact summary', keptId, 1234)
+    const afterCompactPrompt = await buildPrompt(request)
+    const afterCompactCachedPrompt = await buildPrompt(request)
+    const restoredPrompt = await getBuildRunSystemPrompt(new SessionRuntimeService(config))(request)
+    const snapshotEntries = manager.getEntries()
+      .filter((entry) => entry.type === 'custom' && entry.customType === SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE)
+    const latestSnapshotEntry = snapshotEntries.at(-1)
+    const latestSnapshotData = latestSnapshotEntry?.type === 'custom' ? latestSnapshotEntry.data : undefined
+
+    assert.equal(stillCachedPrompt, firstPrompt)
+    assert.notEqual(afterCompactPrompt, firstPrompt)
+    assert.match(afterCompactPrompt, /compact 后被新 snapshot 吸收的 USER 内容/)
+    assert.equal(afterCompactCachedPrompt, afterCompactPrompt)
+    assert.equal(restoredPrompt, afterCompactPrompt)
+    assert.equal(snapshotEntries.length, 2)
+    assert.equal(isSystemPromptSnapshotEntryData(latestSnapshotData), true)
+    if (isSystemPromptSnapshotEntryData(latestSnapshotData)) {
+      assert.equal(latestSnapshotData.snapshot.createdReason, 'compact')
+    }
+  } finally {
+    if (previousLayeredPrompt === undefined) {
+      delete process.env.LAYERED_PROMPT
+    } else {
+      process.env.LAYERED_PROMPT = previousLayeredPrompt
+    }
+    if (previousWorkspaceRoot === undefined) {
+      delete process.env.LECQUY_WORKSPACE_ROOT
+    } else {
+      process.env.LECQUY_WORKSPACE_ROOT = previousWorkspaceRoot
+    }
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('runtime restores snapshot from current branch instead of sibling branch after compact', async () => {
+  const previousLayeredPrompt = process.env.LAYERED_PROMPT
+  const previousWorkspaceRoot = process.env.LECQUY_WORKSPACE_ROOT
+  const workspaceDir = await createWorkspace()
+  const paths = resolvePromptContextPaths(workspaceDir)
+  const manager = new SessionManager({
+    cwd: workspaceDir,
+    sessionDir: path.join(workspaceDir, '.lecquy', 'sessions-test'),
+    persist: false,
+  })
+
+  try {
+    process.env.LAYERED_PROMPT = 'true'
+    process.env.LECQUY_WORKSPACE_ROOT = workspaceDir
+    await writeFile(paths.userFile, '主分支 USER 内容。', 'utf8')
+
+    const config = createTestConfig('.lecquy/sessions-test')
+    const service = new SessionRuntimeService(config)
+    const buildPrompt = getBuildRunSystemPrompt(service)
+    const rootId = manager.appendMessage({
+      role: 'user',
+      content: 'root question',
+      timestamp: Date.now() - 10_000,
+    })
+    const request = {
+      sessionId: manager.getSessionId(),
+      manager,
+      role: 'simple' as const,
+      mode: 'simple' as const,
+      modelId: 'Qwen3',
+      thinkingLevel: 'medium' as const,
+      tools: [createMockTool('read_file', '读取文件')],
+      toolsEnabled: true,
+    }
+
+    const mainPrompt = await buildPrompt(request)
+    const mainLeafId = manager.getLeafId()
+    assert.ok(mainLeafId)
+
+    await writeFile(paths.userFile, '旁支 compact 后 USER 内容。', 'utf8')
+    manager.branch(rootId)
+    const siblingKeptId = manager.appendMessage({
+      role: 'user',
+      content: 'sibling branch kept message',
+      timestamp: Date.now() - 9_000,
+    })
+    manager.appendCompaction('sibling compact summary', siblingKeptId, 1234)
+    const siblingPrompt = await buildPrompt(request)
+
+    manager.branch(mainLeafId)
+    const restoredMainPrompt = await buildPrompt(request)
+
+    assert.notEqual(siblingPrompt, mainPrompt)
+    assert.match(siblingPrompt, /旁支 compact 后 USER 内容/)
+    assert.equal(restoredMainPrompt, mainPrompt)
+    assert.doesNotMatch(restoredMainPrompt, /旁支 compact 后 USER 内容/)
+    assert.match(restoredMainPrompt, /主分支 USER 内容/)
+  } finally {
+    if (previousLayeredPrompt === undefined) {
+      delete process.env.LAYERED_PROMPT
+    } else {
+      process.env.LAYERED_PROMPT = previousLayeredPrompt
+    }
+    if (previousWorkspaceRoot === undefined) {
+      delete process.env.LECQUY_WORKSPACE_ROOT
+    } else {
+      process.env.LECQUY_WORKSPACE_ROOT = previousWorkspaceRoot
+    }
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('runtime cache does not reuse sibling branch snapshot when current branch has no compact', async () => {
+  const previousLayeredPrompt = process.env.LAYERED_PROMPT
+  const previousWorkspaceRoot = process.env.LECQUY_WORKSPACE_ROOT
+  const workspaceDir = await createWorkspace()
+  const paths = resolvePromptContextPaths(workspaceDir)
+  const manager = new SessionManager({
+    cwd: workspaceDir,
+    sessionDir: path.join(workspaceDir, '.lecquy', 'sessions-test'),
+    persist: false,
+  })
+
+  try {
+    process.env.LAYERED_PROMPT = 'true'
+    process.env.LECQUY_WORKSPACE_ROOT = workspaceDir
+    await writeFile(paths.userFile, '无 compact 主分支 USER 内容。', 'utf8')
+
+    const service = new SessionRuntimeService(createTestConfig('.lecquy/sessions-test'))
+    const buildPrompt = getBuildRunSystemPrompt(service)
+    const rootId = manager.appendMessage({
+      role: 'user',
+      content: 'root question',
+      timestamp: Date.now() - 10_000,
+    })
+    const request = {
+      sessionId: manager.getSessionId(),
+      manager,
+      role: 'simple' as const,
+      mode: 'simple' as const,
+      modelId: 'Qwen3',
+      thinkingLevel: 'medium' as const,
+      tools: [createMockTool('read_file', '读取文件')],
+      toolsEnabled: true,
+    }
+
+    const mainPrompt = await buildPrompt(request)
+    const mainLeafId = manager.getLeafId()
+    assert.ok(mainLeafId)
+
+    await writeFile(paths.userFile, '无 compact 旁支 USER 内容。', 'utf8')
+    manager.branch(rootId)
+    manager.appendMessage({
+      role: 'user',
+      content: 'sibling branch message',
+      timestamp: Date.now() - 9_000,
+    })
+    const siblingPrompt = await buildPrompt(request)
+
+    manager.branch(mainLeafId)
+    const restoredMainPrompt = await buildPrompt(request)
+
+    assert.notEqual(siblingPrompt, mainPrompt)
+    assert.match(siblingPrompt, /无 compact 旁支 USER 内容/)
+    assert.equal(restoredMainPrompt, mainPrompt)
+    assert.doesNotMatch(restoredMainPrompt, /无 compact 旁支 USER 内容/)
+    assert.match(restoredMainPrompt, /无 compact 主分支 USER 内容/)
+  } finally {
+    if (previousLayeredPrompt === undefined) {
+      delete process.env.LAYERED_PROMPT
+    } else {
+      process.env.LAYERED_PROMPT = previousLayeredPrompt
+    }
+    if (previousWorkspaceRoot === undefined) {
+      delete process.env.LECQUY_WORKSPACE_ROOT
+    } else {
+      process.env.LECQUY_WORKSPACE_ROOT = previousWorkspaceRoot
+    }
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('runtime ignores corrupt snapshot entries and rebuilds a fresh layered snapshot', async () => {
+  const previousLayeredPrompt = process.env.LAYERED_PROMPT
+  const previousWorkspaceRoot = process.env.LECQUY_WORKSPACE_ROOT
+  const workspaceDir = await createWorkspace()
+  const manager = new SessionManager({
+    cwd: workspaceDir,
+    sessionDir: path.join(workspaceDir, '.lecquy', 'sessions-test'),
+    persist: false,
+  })
+
+  try {
+    process.env.LAYERED_PROMPT = 'true'
+    process.env.LECQUY_WORKSPACE_ROOT = workspaceDir
+
+    const tools = [createMockTool('read_file', '读取文件')]
+    const validSnapshot = await buildFrozenSystemSnapshot({
+      sessionId: manager.getSessionId(),
+      createdReason: 'session_created',
+      role: 'simple',
+      mode: 'simple',
+      workspaceDir,
+      modelId: 'Qwen3',
+      thinkingLevel: 'medium',
+      tools,
+      toolsEnabled: true,
+      now: new Date('2026-05-18T01:02:03.000Z'),
+    })
+    manager.appendCustomEntry(SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE, {
+      kind: SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+      snapshot: {
+        ...validSnapshot,
+        systemText: 'corrupted system text',
+      },
+    })
+
+    const service = new SessionRuntimeService(createTestConfig('.lecquy/sessions-test'))
+    const prompt = await getBuildRunSystemPrompt(service)({
+      sessionId: manager.getSessionId(),
+      manager,
+      role: 'simple',
+      mode: 'simple',
+      modelId: 'Qwen3',
+      thinkingLevel: 'medium',
+      tools,
+      toolsEnabled: true,
+    })
+    const snapshotEntries = manager.getEntries()
+      .filter((entry) => entry.type === 'custom' && entry.customType === SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE)
+    const restoredEntry = snapshotEntries.at(-1)
+    const restoredEntryData = restoredEntry?.type === 'custom' ? restoredEntry.data : undefined
+
+    assert.notEqual(prompt, 'corrupted system text')
+    assert.equal(snapshotEntries.length, 2)
+    assert.equal(isSystemPromptSnapshotEntryData(restoredEntryData), true)
   } finally {
     if (previousLayeredPrompt === undefined) {
       delete process.env.LAYERED_PROMPT

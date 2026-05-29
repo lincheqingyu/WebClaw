@@ -491,7 +491,7 @@ export interface SessionProjection extends SessionEntry {
 
 /**
  * append-only session core 中的消息/控制 entry。
- * 只有 message / custom_message / branch_summary / compaction 参与 buildSessionContext。
+ * 只有 message / display=true custom_message / branch_summary / compaction 参与 buildSessionContext。
  */
 export interface SessionHeader {
   readonly type: 'session'

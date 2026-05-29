@@ -13,6 +13,7 @@ import {
   findLatestFrozenSystemSnapshot,
   isSystemPromptSnapshotEntryData,
   SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+  validateFrozenSystemSnapshot,
   type SystemPromptSnapshotEntryData,
 } from '../system-prompt-snapshot.js'
 import { ensurePromptContextFiles, resolvePromptContextPaths } from '../context-files.js'
@@ -167,11 +168,79 @@ test('snapshot entry helpers store and restore the latest matching role snapshot
       kind: SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
       snapshot: workerSnapshot,
     } satisfies SystemPromptSnapshotEntryData)
+    manager.appendCustomEntry(SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE, {
+      kind: SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+      snapshot: {
+        ...simpleSnapshot,
+        contentHash: '0'.repeat(64),
+      },
+    } satisfies SystemPromptSnapshotEntryData)
 
     assert.equal(isSystemPromptSnapshotEntryData(data), true)
+    assert.equal(validateFrozenSystemSnapshot(simpleSnapshot), true)
+    assert.equal(validateFrozenSystemSnapshot({ ...simpleSnapshot, role: 'bad-role' }), false)
+    assert.equal(validateFrozenSystemSnapshot({ ...simpleSnapshot, contentHash: '0'.repeat(64) }), false)
     assert.equal(findLatestFrozenSystemSnapshot(manager.getEntries(), manager.getSessionId(), 'simple')?.snapshotId, simpleSnapshot.snapshotId)
     assert.equal(findLatestFrozenSystemSnapshot(manager.getEntries(), manager.getSessionId(), 'worker')?.snapshotId, workerSnapshot.snapshotId)
     assert.equal(existsSync(sessionDir), false)
+  } finally {
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('snapshot restore can be scoped to entries after compact boundary', async () => {
+  const workspaceDir = await createWorkspace()
+  const sessionDir = path.join(workspaceDir, '.lecquy', 'sessions-test')
+  const manager = new SessionManager({ cwd: workspaceDir, sessionDir, persist: false })
+
+  try {
+    const tools = [createMockTool('read_file', '读取文件')]
+    const oldSnapshot = await buildFrozenSystemSnapshot({
+      sessionId: manager.getSessionId(),
+      createdReason: 'session_created',
+      role: 'simple',
+      mode: 'simple',
+      workspaceDir,
+      modelId: 'Qwen3',
+      tools,
+      toolsEnabled: true,
+      now: new Date('2026-05-18T01:02:03.000Z'),
+    })
+    manager.appendCustomEntry(SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE, {
+      kind: SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+      snapshot: oldSnapshot,
+    } satisfies SystemPromptSnapshotEntryData)
+    const keptId = manager.appendMessage({
+      role: 'user',
+      content: 'compact 后保留的消息',
+      timestamp: Date.now(),
+    })
+    const compactionId = manager.appendCompaction('compact summary', keptId, 1234)
+
+    assert.equal(findLatestFrozenSystemSnapshot(manager.getEntries(), manager.getSessionId(), 'simple')?.snapshotId, oldSnapshot.snapshotId)
+    assert.equal(findLatestFrozenSystemSnapshot(manager.getEntries(), manager.getSessionId(), 'simple', {
+      afterEntryId: compactionId,
+    }), null)
+
+    const newSnapshot = await buildFrozenSystemSnapshot({
+      sessionId: manager.getSessionId(),
+      createdReason: 'compact',
+      role: 'simple',
+      mode: 'simple',
+      workspaceDir,
+      modelId: 'Qwen3',
+      tools,
+      toolsEnabled: true,
+      now: new Date('2026-05-19T01:02:03.000Z'),
+    })
+    manager.appendCustomEntry(SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE, {
+      kind: SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
+      snapshot: newSnapshot,
+    } satisfies SystemPromptSnapshotEntryData)
+
+    assert.equal(findLatestFrozenSystemSnapshot(manager.getEntries(), manager.getSessionId(), 'simple', {
+      afterEntryId: compactionId,
+    })?.snapshotId, newSnapshot.snapshotId)
   } finally {
     await rm(workspaceDir, { recursive: true, force: true })
   }

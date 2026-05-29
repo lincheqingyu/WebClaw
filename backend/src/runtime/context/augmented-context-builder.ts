@@ -34,30 +34,11 @@ export function buildAugmentedContext(input: BuildAugmentedContextInput): BuildA
   const sessionContextMessages = sessionContext.messages
   const memoryRecallBlock = normalizeOptionalBlock(input.memoryRecallBlock)
 
-  const contextMessages: AgentMessage[] = []
-  let compactSummaryMessage: AgentMessage | null = null
-  let recentTailMessages: AgentMessage[] = []
-
-  if (
-    sessionContext.compaction
-    && sessionContext.compaction.summaryMessageIndex === 0
-    && sessionContextMessages[0]
-  ) {
-    compactSummaryMessage = sessionContextMessages[0]
-    recentTailMessages = sessionContextMessages.slice(1)
-  } else {
-    contextMessages.push(...sessionContextMessages)
-  }
+  const contextMessages: AgentMessage[] = [...sessionContextMessages]
 
   if (memoryRecallBlock) {
     contextMessages.push(createSyntheticUserContextMessage(memoryRecallBlock))
   }
-
-  if (compactSummaryMessage) {
-    contextMessages.push(compactSummaryMessage)
-  }
-
-  contextMessages.push(...recentTailMessages)
 
   return { contextMessages }
 }

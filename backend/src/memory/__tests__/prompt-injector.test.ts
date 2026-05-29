@@ -79,7 +79,7 @@ async function withPatchedDeps(
   }
 }
 
-test('buildMemoryRecallMessages returns memory_recall layer when SQLite recall hits', async () => {
+test('buildMemoryRecallMessages returns retrieved_memory block when SQLite recall hits', async () => {
   await withPatchedDeps({
     getPool: () => ({}) as never,
     searchEventMemories: async () => {
@@ -108,8 +108,9 @@ test('buildMemoryRecallMessages returns memory_recall layer when SQLite recall h
     assert.equal(typeof messages[0]?.content, 'string')
     assert.equal(
       messages[0]?.content,
-      '<LAYER:memory_recall>\n命中 3 条 SQLite 记忆：SQLite 召回 1 / SQLite 召回 2 / SQLite 召回 3\n</LAYER>',
+      '<retrieved_memory priority="low" source="lecquy">\n命中 3 条 SQLite 记忆：SQLite 召回 1 / SQLite 召回 2 / SQLite 召回 3\n</retrieved_memory>',
     )
+    assert.doesNotMatch(String(messages[0]?.content), /<LAYER:memory_recall>/)
   })
 })
 
@@ -128,7 +129,10 @@ test('buildMemoryRecallMessages falls back to file system when SQLite recall mis
     })
 
     assert.equal(messages.length, 1)
-    assert.equal(messages[0]?.content, '<LAYER:memory_recall>\n来自文件系统的 recall\n</LAYER>')
+    assert.equal(
+      messages[0]?.content,
+      '<retrieved_memory priority="low" source="lecquy">\n来自文件系统的 recall\n</retrieved_memory>',
+    )
   })
 })
 

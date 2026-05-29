@@ -29,6 +29,7 @@ import type { TodoManager } from '../core/todo/todo-manager.js'
 import { logger } from '../utils/logger.js'
 import type { ConfirmationBroker } from '../runtime/confirmation-broker.js'
 import { compactInLoop } from '../runtime/context/in-loop-compactor.js'
+import type { AiRequestPromptFrameMeta } from '../runtime/context/prompt-frame-builder.js'
 
 export interface ManagerAgentOptions {
   messages: AgentMessage[]
@@ -53,6 +54,7 @@ export interface ManagerAgentOptions {
   sessionId?: string
   runId?: RunId
   confirmationBroker?: ConfirmationBroker
+  promptFrame?: AiRequestPromptFrameMeta
 }
 
 export interface ManagerAgentResult {
@@ -122,6 +124,7 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
     sessionId,
     runId,
     confirmationBroker,
+    promptFrame,
   } = options
 
   const workspaceDir = resolveWorkspaceRoot()
@@ -173,7 +176,7 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
       maxRetryDelayMs: options.maxRetryDelayMs,
       metadata: options.metadata,
       onPayload: (payload) => {
-        mutateProviderPayload(model, payload)
+        const providerPayloadMutation = mutateProviderPayload({ model, payload, promptFrame })
         logAiRequestSnapshot({
           role: 'manager',
           model,
@@ -184,6 +187,8 @@ export async function runManagerAgent(options: ManagerAgentOptions): Promise<Man
           sessionId,
           runId,
           llmSessionId: options.llmSessionId,
+          promptFrame,
+          providerPayloadMutation,
         }, payload)
       },
       convertToLlm: (agentMessages: AgentMessage[]) =>

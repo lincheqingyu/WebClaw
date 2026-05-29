@@ -11,6 +11,7 @@ import type { SessionEventEntry } from '@lecquy/shared'
 import { loadConfig } from '../config/index.js'
 import { SessionManager } from '../runtime/pi-session-core/session-manager.js'
 import { formatCompactionContextMessage } from '../runtime/context/templates/compact-summary.template.js'
+import { RUNTIME_AUGMENTATION_CUSTOM_TYPE } from '../runtime/context/runtime-augmentation.js'
 import {
   applyCompactionIfNeeded,
   buildCompactionPrompt,
@@ -728,6 +729,44 @@ describe('formatHistoryForCompaction', () => {
     const result = formatHistoryForCompaction(entries)
     assert.ok(!result.includes('这是 compaction entry'), 'compaction entry 被跳过')
     assert.ok(result.includes('[用户] 正常消息'), '正常消息保留')
+  })
+
+  test('runtime augmentation 与 synthetic prompt 标签不会进入 compact history', () => {
+    const entries: SessionEventEntry[] = [
+      {
+        id: 'e1',
+        type: 'message',
+        message: { role: 'user', content: '真实用户消息', timestamp: 1 },
+      } as SessionEventEntry,
+      {
+        id: 'a1',
+        type: 'custom',
+        customType: RUNTIME_AUGMENTATION_CUSTOM_TYPE,
+        data: {
+          content: '<retrieved_memory priority="low" source="lecquy">\n隐藏记忆\n</retrieved_memory>',
+        },
+      } as unknown as SessionEventEntry,
+      {
+        id: 'a2',
+        type: 'custom_message',
+        customType: RUNTIME_AUGMENTATION_CUSTOM_TYPE,
+        content: '<system_prompt_update priority="high" source="lecquy">\n隐藏更新\n</system_prompt_update>',
+        display: false,
+      } as unknown as SessionEventEntry,
+      {
+        id: 'e2',
+        type: 'message',
+        message: { role: 'assistant', content: '真实助手消息', timestamp: 2 },
+      } as SessionEventEntry,
+    ]
+
+    const result = formatHistoryForCompaction(entries)
+    assert.ok(result.includes('[用户] 真实用户消息'), '真实用户消息保留')
+    assert.ok(result.includes('[助手] 真实助手消息'), '真实助手消息保留')
+    assert.ok(!result.includes('retrieved_memory'), 'retrieved_memory 标签不进入摘要输入')
+    assert.ok(!result.includes('system_prompt_update'), 'system_prompt_update 标签不进入摘要输入')
+    assert.ok(!result.includes('隐藏记忆'), 'runtime augmentation 内容不进入摘要输入')
+    assert.ok(!result.includes('隐藏更新'), 'synthetic update 内容不进入摘要输入')
   })
 })
 

@@ -86,7 +86,7 @@ export async function buildMemoryRecallBlockLegacy(
 function createMemoryRecallMessage(text: string): AgentMessage {
   return {
     role: 'user',
-    content: `<LAYER:memory_recall>\n${text}\n</LAYER>`,
+    content: `<retrieved_memory priority="low" source="lecquy">\n${text}\n</retrieved_memory>`,
     timestamp: 0,
   }
 }

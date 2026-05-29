@@ -263,7 +263,7 @@ export function buildSessionContext(
       if (message) messages.push(message)
       return
     }
-    if (entry.type === 'custom_message') {
+    if (entry.type === 'custom_message' && entry.display) {
       messages.push(createCustomMessage(entry))
       return
     }
@@ -478,6 +478,14 @@ export class SessionManager {
       current = current.parentId ? this.byId.get(current.parentId) : undefined
     }
     return path
+  }
+
+  getCurrentBranchEntries(): SessionEventEntry[] {
+    const entries = this.getEntries()
+    if (this.leafId || entries.length === 0) {
+      return this.getBranch()
+    }
+    return this.getBranch(entries[entries.length - 1]?.id)
   }
 
   branch(branchFromId: string): void {

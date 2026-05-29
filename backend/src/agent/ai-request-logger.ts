@@ -8,6 +8,8 @@ import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import type { RunId } from '@lecquy/shared'
 import { resolveWorkspaceRoot } from '../core/runtime-paths.js'
 import { logger } from '../utils/logger.js'
+import type { AiRequestPromptFrameMeta } from '../runtime/context/prompt-frame-builder.js'
+import { inferProviderFlavor, type ProviderFlavor, type ProviderPayloadMutationResult } from './provider-payload.js'
 
 type AgentRole = 'simple' | 'manager' | 'worker'
 
@@ -21,6 +23,8 @@ interface AiRequestLoggerOptions {
   readonly sessionId?: string
   readonly runId?: RunId
   readonly llmSessionId?: string
+  readonly promptFrame?: AiRequestPromptFrameMeta
+  readonly providerPayloadMutation?: ProviderPayloadMutationResult
 }
 
 interface AiRequestSnapshot {
@@ -44,6 +48,10 @@ interface AiRequestSnapshot {
     readonly promptMessages: readonly AgentMessage[]
     readonly contextMessages: readonly AgentMessage[]
   }
+  readonly promptFrame?: AiRequestPromptFrameMeta
+  readonly providerFlavor: ProviderFlavor
+  readonly payloadMutationApplied: boolean
+  readonly cacheControlApplied: boolean
   readonly payload: unknown
 }
 
@@ -116,6 +124,11 @@ export function logAiRequestSnapshot(options: AiRequestLoggerOptions, payload: u
   }
 
   const requestId = createRequestId(options.role)
+  const providerPayloadMutation = options.providerPayloadMutation ?? {
+    providerFlavor: inferProviderFlavor(options.model.baseUrl, options.model.provider),
+    payloadMutationApplied: false,
+    cacheControlApplied: false,
+  }
   const snapshot: AiRequestSnapshot = {
     requestId,
     timestamp: new Date().toISOString(),
@@ -137,6 +150,10 @@ export function logAiRequestSnapshot(options: AiRequestLoggerOptions, payload: u
       promptMessages: options.promptMessages,
       contextMessages: options.contextMessages,
     },
+    promptFrame: options.promptFrame,
+    providerFlavor: providerPayloadMutation.providerFlavor,
+    payloadMutationApplied: providerPayloadMutation.payloadMutationApplied,
+    cacheControlApplied: providerPayloadMutation.cacheControlApplied,
     payload,
   }
 

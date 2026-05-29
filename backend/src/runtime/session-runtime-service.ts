@@ -68,9 +68,16 @@ import {
   SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE,
   buildFrozenSystemSnapshot,
   findLatestFrozenSystemSnapshot,
+  isSystemPromptSnapshotEntryData,
   type FrozenSystemSnapshot,
   type SystemPromptSnapshotEntryData,
 } from '../core/prompts/system-prompt-snapshot.js'
+import {
+  buildSystemPromptUpdate,
+  type SystemPromptUpdate,
+  type SystemPromptUpdatePhase,
+} from '../core/prompts/system-prompt-update.js'
+import { hashContent } from '../core/prompts/prompt-serializer.js'
 import { createTodoManager } from '../core/todo/todo-manager.js'
 import { migrateLegacyRuntimeStorage } from '../core/runtime-storage-migration.js'
 import {
@@ -88,6 +95,17 @@ import { extractAndPersistOnTurnComplete, getMemoryCoordinator } from '../memory
 import { syncTodosToForesight } from '../memory/foresight-sync.js'
 import { buildMemoryRecallBlockLegacy, buildMemoryRecallMessages } from '../memory/prompt-injector.js'
 import { buildAugmentedContext } from './context/augmented-context-builder.js'
+import {
+  buildRuntimePromptFrame,
+  toAiRequestPromptFrameMeta,
+  type RuntimePromptFrame,
+} from './context/prompt-frame-builder.js'
+import {
+  RUNTIME_AUGMENTATION_CUSTOM_TYPE,
+  createRuntimeAugmentationEntryData,
+  type RuntimeAugmentationKind,
+  type RuntimeAugmentationEntryData,
+} from './context/runtime-augmentation.js'
 import { appendAuditEntry, type ApprovalAuditEntry } from './approval-audit.js'
 import { ConfirmationBroker } from './confirmation-broker.js'
 import { resolveSessionKey } from './session-key.js'
@@ -103,6 +121,11 @@ interface ActiveRunHandle {
   readonly runId: RunId
   readonly mode: SessionMode
   readonly abortController: AbortController
+}
+
+interface SystemPromptSnapshotCacheEntry {
+  readonly snapshot: FrozenSystemSnapshot
+  readonly compactBoundaryEntryId?: string
 }
 
 interface ResolvedArtifactHandle {
@@ -148,6 +171,30 @@ interface PromptBuildRequest {
   readonly toolsEnabled: boolean
   readonly extraInstructions?: string
   readonly activeSkillName?: string
+}
+
+interface PromptRuntimeContext {
+  readonly systemPrompt: string
+  readonly contextMessages: AgentMessage[]
+  readonly update?: SystemPromptUpdate
+  readonly augmentations: RuntimeAugmentationEntryData[]
+  readonly frame: RuntimePromptFrame
+}
+
+interface PromptFrameOptions {
+  readonly phase?: SystemPromptUpdatePhase
+  readonly targetMessageId: string
+  readonly runId: RunId
+  readonly stepId?: StepId
+  readonly memoryRecallMessages?: AgentMessage[]
+  readonly additionalAugmentations?: ReadonlyArray<PromptFrameAdditionalAugmentation>
+  readonly currentUserMessage: AgentMessage
+}
+
+interface PromptFrameAdditionalAugmentation {
+  readonly augmentationKind: RuntimeAugmentationKind
+  readonly content: string
+  readonly stepId?: StepId
 }
 
 export interface SendRunResult {
@@ -563,6 +610,91 @@ function createAgentUserMessage(record: SessionMessageRecord): UserMessage {
   }
 }
 
+function createRetrievedMemoryMessage(text: string): AgentMessage {
+  return {
+    role: 'user',
+    content: [{
+      type: 'text',
+      text: `<retrieved_memory priority="low" source="lecquy">\n${text.trim()}\n</retrieved_memory>`,
+    }],
+    timestamp: 0,
+  }
+}
+
+function extractAgentMessageText(message: AgentMessage): string {
+  if (!('content' in message)) {
+    return ''
+  }
+
+  const { content } = message
+  if (typeof content === 'string') {
+    return content
+  }
+  if (!Array.isArray(content)) {
+    return ''
+  }
+
+  return content
+    .map((part) => ('text' in part && typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+}
+
+function createPromptFrameId(request: PromptBuildRequest, phase: SystemPromptUpdatePhase, runId: RunId): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2, 8)
+  return `frame_${String(runId)}_${request.role}_${phase}_${timestamp}_${random}`
+}
+
+function escapePlanTaskResultContent(content: string): string {
+  return content.replace(/\r\n/g, '\n').replaceAll('</plan_task_result>', '<\\/plan_task_result>')
+}
+
+function formatPlanTaskResultBlock(input: {
+  readonly todoIndex: number
+  readonly status: 'completed' | 'blocked'
+  readonly content: string
+}): string {
+  return [
+    `<plan_task_result source="lecquy" todo_id="todo-${input.todoIndex + 1}" status="${input.status}">`,
+    escapePlanTaskResultContent(input.content.trim()),
+    '</plan_task_result>',
+  ].join('\n')
+}
+
+function buildPlanTaskResultAugmentationsFromTodos(
+  items: ReadonlyArray<{ readonly status: string; readonly result?: string; readonly errorMessage?: string }>,
+  overrides: ReadonlyMap<number, PromptFrameAdditionalAugmentation>,
+): PromptFrameAdditionalAugmentation[] {
+  return items.flatMap((item, index) => {
+    if (item.status !== 'completed') {
+      return []
+    }
+
+    const override = overrides.get(index)
+    if (override) {
+      return [override]
+    }
+
+    const blockedReason = item.errorMessage?.trim()
+    const result = item.result?.trim()
+    const status = blockedReason ? 'blocked' : 'completed'
+    const content = blockedReason
+      ? `任务 ${index + 1} 被阻塞：\n${blockedReason}`
+      : `任务 ${index + 1} 执行结果：\n${result || '(无结果文本)'}`
+
+    return [{
+      augmentationKind: 'plan_task_result',
+      content: formatPlanTaskResultBlock({
+        todoIndex: index,
+        status,
+        content,
+      }),
+    }]
+  })
+}
+
 function messageCount(manager: SessionManager): number {
   return manager.getEntries().filter((entry) => entry.type === 'message' && (entry.message.role === 'user' || entry.message.role === 'assistant')).length
 }
@@ -619,7 +751,7 @@ export class SessionRuntimeService {
   // 与 toolArgsByCallId 并列，只存状态相关字段。落库 assistant message 时用于补全 toolCall block。
   private readonly toolResultsByCallId = new Map<string, ToolResultState>()
   private readonly skillSessions = new Map<string, SkillSession>()
-  private readonly systemPromptSnapshots = new Map<string, FrozenSystemSnapshot>()
+  private readonly systemPromptSnapshots = new Map<string, SystemPromptSnapshotCacheEntry>()
   private readonly sessionModes = new Map<string, SessionMode>()
   private readonly broker: ConfirmationBroker
 
@@ -780,6 +912,31 @@ export class SessionRuntimeService {
 
   private getSystemPromptSnapshotCacheKey(sessionId: string, role: AgentRole): string {
     return `${sessionId}:${role}`
+  }
+
+  private getLatestCompactionBoundary(entries: ReadonlyArray<SessionEventEntry>): { readonly entryId: string; readonly timestamp: string } | undefined {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]
+      if (entry?.type === 'compaction') {
+        return { entryId: entry.id, timestamp: entry.timestamp }
+      }
+    }
+    return undefined
+  }
+
+  private containsSystemPromptSnapshotEntry(
+    entries: ReadonlyArray<SessionEventEntry>,
+    snapshot: FrozenSystemSnapshot,
+  ): boolean {
+    return entries.some((entry) => {
+      if (entry.type !== 'custom' || entry.customType !== SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE) {
+        return false
+      }
+      return isSystemPromptSnapshotEntryData(entry.data)
+        && entry.data.snapshot.sessionId === snapshot.sessionId
+        && entry.data.snapshot.role === snapshot.role
+        && entry.data.snapshot.snapshotId === snapshot.snapshotId
+    })
   }
 
   private deleteSystemPromptSnapshots(sessionId: string): void {
@@ -1397,7 +1554,13 @@ export class SessionRuntimeService {
     })
   }
 
-  private async buildContextMessages(
+  private buildBaseContextMessages(bound: BoundSession): AgentMessage[] {
+    return buildAugmentedContext({
+      sessionManager: bound.manager,
+    }).contextMessages
+  }
+
+  private async buildMemoryRecallContextMessages(
     bound: BoundSession,
     mode: SessionMode,
     userQuery: string,
@@ -1413,10 +1576,7 @@ export class SessionRuntimeService {
         mode,
         route: bound.projection.route,
       })
-      const augmentedContext = buildAugmentedContext({
-        sessionManager: bound.manager,
-      }).contextMessages
-      return [...recallMessages, ...augmentedContext]
+      return recallMessages
     }
 
     const memoryRecallBlock = await buildMemoryRecallBlockLegacy({
@@ -1428,28 +1588,41 @@ export class SessionRuntimeService {
       route: bound.projection.route,
     })
 
-    return buildAugmentedContext({
-      sessionManager: bound.manager,
-      memoryRecallBlock,
-    }).contextMessages
+    const normalized = memoryRecallBlock.trim()
+    return normalized ? [createRetrievedMemoryMessage(normalized)] : []
   }
 
   private async ensureFrozenSystemSnapshot(request: PromptBuildRequest): Promise<FrozenSystemSnapshot> {
     const cacheKey = this.getSystemPromptSnapshotCacheKey(request.sessionId, request.role)
+    const branchEntries = request.manager.getCurrentBranchEntries()
+    const compactBoundary = this.getLatestCompactionBoundary(branchEntries)
     const cached = this.systemPromptSnapshots.get(cacheKey)
+    if (
+      cached
+      && cached.compactBoundaryEntryId === compactBoundary?.entryId
+      && this.containsSystemPromptSnapshotEntry(branchEntries, cached.snapshot)
+    ) {
+      return cached.snapshot
+    }
     if (cached) {
-      return cached
+      this.systemPromptSnapshots.delete(cacheKey)
     }
 
-    const restored = findLatestFrozenSystemSnapshot(request.manager.getEntries(), request.sessionId, request.role)
+    const restored = findLatestFrozenSystemSnapshot(branchEntries, request.sessionId, request.role, {
+      afterEntryId: compactBoundary?.entryId,
+      afterTimestamp: compactBoundary?.timestamp,
+    })
     if (restored) {
-      this.systemPromptSnapshots.set(cacheKey, restored)
+      this.systemPromptSnapshots.set(cacheKey, {
+        snapshot: restored,
+        compactBoundaryEntryId: compactBoundary?.entryId,
+      })
       return restored
     }
 
     const snapshot = await buildFrozenSystemSnapshot({
       sessionId: request.sessionId,
-      createdReason: 'session_created',
+      createdReason: compactBoundary ? 'compact' : 'session_created',
       role: request.role,
       mode: request.mode,
       workspaceDir: this.runtimePaths.workspaceDir,
@@ -1467,7 +1640,10 @@ export class SessionRuntimeService {
       snapshot,
     }
     request.manager.appendCustomEntry(SYSTEM_PROMPT_SNAPSHOT_CUSTOM_TYPE, entryData)
-    this.systemPromptSnapshots.set(cacheKey, snapshot)
+    this.systemPromptSnapshots.set(cacheKey, {
+      snapshot,
+      compactBoundaryEntryId: compactBoundary?.entryId,
+    })
     return snapshot
   }
 
@@ -1491,6 +1667,124 @@ export class SessionRuntimeService {
 
     const snapshot = await this.ensureFrozenSystemSnapshot(request)
     return snapshot.systemText
+  }
+
+  private async buildRunPromptContext(
+    request: PromptBuildRequest,
+    baseContextMessages: AgentMessage[],
+    options: PromptFrameOptions,
+  ): Promise<PromptRuntimeContext> {
+    const phase = options.phase ?? 'normal'
+    const promptFrameId = createPromptFrameId(request, phase, options.runId)
+    const useLayeredPrompt = process.env.LAYERED_PROMPT === 'true'
+    let systemPrompt: string
+    let systemSnapshotId: string | undefined
+    let systemPromptHash: string
+    let update: SystemPromptUpdate | undefined
+
+    const augmentations: RuntimeAugmentationEntryData[] = []
+    for (const [index, message] of (options.memoryRecallMessages ?? []).entries()) {
+      const content = extractAgentMessageText(message)
+      if (!content) {
+        continue
+      }
+      augmentations.push(createRuntimeAugmentationEntryData({
+        augmentationKind: 'retrieved_memory',
+        promptFrameId,
+        sessionId: request.sessionId,
+        runId: options.runId,
+        stepId: options.stepId,
+        promptRole: request.role,
+        phase,
+        targetMessageId: options.targetMessageId,
+        ordinal: index,
+        content,
+      }))
+    }
+
+    if (!useLayeredPrompt) {
+      systemPrompt = await this.buildRunSystemPrompt(request)
+      systemPromptHash = hashContent(systemPrompt)
+    } else {
+      const snapshot = await this.ensureFrozenSystemSnapshot(request)
+      systemPrompt = snapshot.systemText
+      systemSnapshotId = snapshot.snapshotId
+      systemPromptHash = snapshot.contentHash
+      update = await buildSystemPromptUpdate({
+        snapshot,
+        role: request.role,
+        mode: request.mode,
+        workspaceDir: this.runtimePaths.workspaceDir,
+        route: request.route,
+        modelId: request.modelId,
+        thinkingLevel: request.thinkingLevel,
+        tools: request.tools,
+        toolsEnabled: request.toolsEnabled,
+        extraInstructions: request.extraInstructions,
+        activeSkillName: request.activeSkillName,
+        skillSession: this.getOrCreateSkillSession(request.sessionId),
+        phase,
+      }) ?? undefined
+
+      if (update) {
+        augmentations.push(createRuntimeAugmentationEntryData({
+          augmentationKind: 'system_prompt_update',
+          promptFrameId,
+          sessionId: request.sessionId,
+          runId: options.runId,
+          stepId: options.stepId,
+          promptRole: request.role,
+          phase,
+          targetMessageId: options.targetMessageId,
+          ordinal: augmentations.length,
+          content: update.serializedText,
+          source: {
+            snapshotId: update.baseSnapshotId,
+            snapshotHash: snapshot.contentHash,
+            sourceHashBefore: update.sourceHashBefore,
+            sourceHashNow: update.sourceHashNow,
+          },
+        }))
+      }
+    }
+
+    for (const additionalAugmentation of options.additionalAugmentations ?? []) {
+      augmentations.push(createRuntimeAugmentationEntryData({
+        augmentationKind: additionalAugmentation.augmentationKind,
+        promptFrameId,
+        sessionId: request.sessionId,
+        runId: options.runId,
+        stepId: additionalAugmentation.stepId ?? options.stepId,
+        promptRole: request.role,
+        phase,
+        targetMessageId: options.targetMessageId,
+        ordinal: augmentations.length,
+        content: additionalAugmentation.content,
+      }))
+    }
+
+    for (const augmentation of augmentations) {
+      request.manager.appendCustomEntry(RUNTIME_AUGMENTATION_CUSTOM_TYPE, augmentation)
+    }
+
+    const frame = buildRuntimePromptFrame({
+      promptFrameId,
+      systemPrompt,
+      systemSnapshotId,
+      systemPromptHash,
+      currentVisibleMessage: options.currentUserMessage,
+      historyMessages: baseContextMessages,
+      augmentations,
+      currentUserMessage: options.currentUserMessage,
+    })
+
+    return {
+      systemPrompt,
+      contextMessages: frame.replayMessages.slice(0, -1),
+      update,
+      augmentations,
+      frame,
+    }
   }
 
   private async executeRun(
@@ -1527,8 +1821,9 @@ export class SessionRuntimeService {
 
     const attachments = modelOptions.attachments ?? []
     const userMessage = this.createUserMessage(input, attachments)
-    const contextBeforeInput = await this.buildContextMessages(bound, mode, input)
-    manager.appendMessage(userMessage)
+    const contextBeforeInput = this.buildBaseContextMessages(bound)
+    const memoryRecallMessages = await this.buildMemoryRecallContextMessages(bound, mode, input)
+    const userMessageId = manager.appendMessage(userMessage)
     manager.appendRunStarted(runId, mode)
 
     let latestProjection = await this.refreshProjection(sessionKey)
@@ -1540,7 +1835,10 @@ export class SessionRuntimeService {
           bound,
           runId,
           userMessage,
+          userMessageId,
           contextBeforeInput,
+          memoryRecallMessages,
+          [],
           model,
           apiKey,
           modelOptions,
@@ -1554,7 +1852,20 @@ export class SessionRuntimeService {
         return reply
       }
 
-      const reply = await this.executePlan(bound, runId, userMessage, contextBeforeInput, model, apiKey, modelOptions, abortController.signal, thinkingLevel, resumePause)
+      const reply = await this.executePlan(
+        bound,
+        runId,
+        userMessage,
+        userMessageId,
+        contextBeforeInput,
+        memoryRecallMessages,
+        model,
+        apiKey,
+        modelOptions,
+        abortController.signal,
+        thinkingLevel,
+        resumePause,
+      )
       latestProjection = await this.refreshProjection(sessionKey)
       if (latestProjection.workflow?.status === 'paused') {
         this.emitRunState(sessionKey, latestProjection, runId, mode, 'paused')
@@ -1595,6 +1906,7 @@ export class SessionRuntimeService {
           maxOutputTokens: compactionSpec.maxTokens,
           contextWindowSource: compactionSpec.contextWindowSource,
         })) {
+          this.deleteSystemPromptSnapshots(bound.projection.sessionId)
           await this.refreshProjection(sessionKey)
         }
       } catch (error) {
@@ -1635,7 +1947,10 @@ export class SessionRuntimeService {
     bound: BoundSession,
     runId: RunId,
     _userMessage: SessionMessageRecord,
+    userMessageId: string,
     contextMessages: AgentMessage[],
+    memoryRecallMessages: AgentMessage[],
+    additionalAugmentations: ReadonlyArray<PromptFrameAdditionalAugmentation>,
     model: Model<'openai-completions'>,
     apiKey: string,
     modelOptions: ClientModelOptions & { systemPrompt?: string; attachments?: ChatAttachment[] },
@@ -1652,7 +1967,8 @@ export class SessionRuntimeService {
     const sessionKey = bound.projection.key
     const toolsEnabled = modelOptions.enableTools ?? false
     const tools = toolsEnabled ? createSimpleTools() : []
-    const systemPrompt = await this.buildRunSystemPrompt({
+    const currentUserAgentMessage = createAgentUserMessage(_userMessage as SessionMessageRecord)
+    const promptContext = await this.buildRunPromptContext({
       sessionId: bound.projection.sessionId,
       manager: bound.manager,
       role: 'simple',
@@ -1663,20 +1979,28 @@ export class SessionRuntimeService {
       tools,
       toolsEnabled,
       extraInstructions: modelOptions.systemPrompt,
+    }, contextMessages, {
+      phase: mode === 'plan' ? 'plan_final_answer' : 'normal',
+      targetMessageId: userMessageId,
+      runId,
+      memoryRecallMessages,
+      additionalAugmentations,
+      currentUserMessage: currentUserAgentMessage,
     })
+    const { systemPrompt } = promptContext
+    const runtimeContextMessages = promptContext.contextMessages
 
     step = await this.beginStep(bound, runId, step)
 
     let result: Awaited<ReturnType<typeof runSimpleAgent>>
     try {
       result = await runSimpleAgent({
-        messages: [
-          createAgentUserMessage(_userMessage as SessionMessageRecord),
-        ],
-        contextMessages,
+        messages: [currentUserAgentMessage],
+        contextMessages: runtimeContextMessages,
         model,
         apiKey,
         systemPromptOverride: systemPrompt,
+        promptFrame: toAiRequestPromptFrameMeta(promptContext.frame),
         thinkingLevel,
         temperature: modelOptions.options?.temperature,
         maxTokens: modelOptions.options?.maxTokens,
@@ -1701,7 +2025,7 @@ export class SessionRuntimeService {
       })
     } catch (error) {
       if (error instanceof AgentExecutionError) {
-        const partialMessages = error.messages.slice(contextMessages.length)
+        const partialMessages = error.messages.slice(runtimeContextMessages.length)
         appendAssistantMessages(
           bound.manager,
           partialMessages,
@@ -1713,7 +2037,7 @@ export class SessionRuntimeService {
       throw error
     }
 
-    const newMessages = result.messages.slice(contextMessages.length)
+    const newMessages = result.messages.slice(runtimeContextMessages.length)
     appendAssistantMessages(
       bound.manager,
       newMessages,
@@ -1729,7 +2053,9 @@ export class SessionRuntimeService {
     bound: BoundSession,
     runId: RunId,
     _userMessage: SessionMessageRecord,
+    userMessageId: string,
     contextMessages: AgentMessage[],
+    memoryRecallMessages: AgentMessage[],
     model: Model<'openai-completions'>,
     apiKey: string,
     modelOptions: ClientModelOptions & { systemPrompt?: string; attachments?: ChatAttachment[] },
@@ -1743,6 +2069,7 @@ export class SessionRuntimeService {
     if (currentItems && currentItems.length > 0) {
       todoManager.loadItems(currentItems.map((item) => ({ ...item })))
     }
+    const planTaskResultAugmentationsByIndex = new Map<number, PromptFrameAdditionalAugmentation>()
 
     const persistTodoState = async (emitEvent = true): Promise<SerializedTodoItem[]> => {
       const items = todoManager.getItems().map((item) => ({ ...item }))
@@ -1773,7 +2100,8 @@ export class SessionRuntimeService {
         title: '生成计划',
       }
       const managerTools = createManagerTools(todoManager)
-      const managerSystemPrompt = await this.buildRunSystemPrompt({
+      const managerCurrentUserMessage = createAgentUserMessage(_userMessage as SessionMessageRecord)
+      const managerPromptContext = await this.buildRunPromptContext({
         sessionId: bound.projection.sessionId,
         manager: bound.manager,
         role: 'manager',
@@ -1784,17 +2112,24 @@ export class SessionRuntimeService {
         tools: managerTools,
         toolsEnabled: true,
         extraInstructions: modelOptions.systemPrompt,
+      }, contextMessages, {
+        phase: 'manager',
+        targetMessageId: userMessageId,
+        runId,
+        memoryRecallMessages,
+        currentUserMessage: managerCurrentUserMessage,
       })
+      const managerSystemPrompt = managerPromptContext.systemPrompt
+      const managerContextMessages = managerPromptContext.contextMessages
       plannerStep = await this.beginStep(bound, runId, plannerStep)
 
       const managerResult = await runManagerAgent({
-        messages: [
-          createAgentUserMessage(_userMessage as SessionMessageRecord),
-        ],
-        contextMessages,
+        messages: [managerCurrentUserMessage],
+        contextMessages: managerContextMessages,
         model,
         apiKey,
         systemPromptOverride: managerSystemPrompt,
+        promptFrame: toAiRequestPromptFrameMeta(managerPromptContext.frame),
         thinkingLevel,
         temperature: modelOptions.options?.temperature,
         maxTokens: modelOptions.options?.maxTokens,
@@ -1836,7 +2171,7 @@ export class SessionRuntimeService {
         return ''
       }
 
-      const managerMessages = managerResult.messages.slice(contextMessages.length)
+      const managerMessages = managerResult.messages.slice(managerContextMessages.length)
       appendAssistantMessages(
         bound.manager,
         managerMessages,
@@ -1874,7 +2209,13 @@ export class SessionRuntimeService {
       injectedInput = undefined
 
       const workerTools = createWorkerTools()
-      const workerSystemPrompt = await this.buildRunSystemPrompt({
+      const workerMemoryRecallMessages = await this.buildMemoryRecallContextMessages(bound, 'plan', prompt)
+      const workerCurrentUserMessage: AgentMessage = {
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+      }
+      const workerPromptContext = await this.buildRunPromptContext({
         sessionId: bound.projection.sessionId,
         manager: bound.manager,
         role: 'worker',
@@ -1885,12 +2226,21 @@ export class SessionRuntimeService {
         tools: workerTools,
         toolsEnabled: true,
         extraInstructions: modelOptions.systemPrompt,
+      }, [], {
+        phase: 'worker',
+        targetMessageId: userMessageId,
+        runId,
+        stepId: step.stepId,
+        memoryRecallMessages: workerMemoryRecallMessages,
+        currentUserMessage: workerCurrentUserMessage,
       })
 
       const workerResult = await runWorkerAgent({
         todoId: `todo-${index + 1}`,
         todoSnapshot: prompt,
-        systemPrompt: workerSystemPrompt,
+        systemPrompt: workerPromptContext.systemPrompt,
+        runtimeContextMessages: workerPromptContext.contextMessages,
+        promptFrame: toAiRequestPromptFrameMeta(workerPromptContext.frame),
         model,
         apiKey,
         thinkingLevel,
@@ -1937,11 +2287,15 @@ export class SessionRuntimeService {
 
       if (workerDecision.action === 'complete') {
         todoManager.markCompleted(index, workerResult.receipt.result)
-        bound.manager.appendCustomMessageEntry(
-          'task_result',
-          [{ type: 'text', text: `任务 ${index + 1} 执行结果：\n${workerResult.receipt.result}` }],
-          false,
-        )
+        planTaskResultAugmentationsByIndex.set(index, {
+          augmentationKind: 'plan_task_result',
+          stepId: step.stepId,
+          content: formatPlanTaskResultBlock({
+            todoIndex: index,
+            status: 'completed',
+            content: `任务 ${index + 1} 执行结果：\n${workerResult.receipt.result}`,
+          }),
+        })
         await this.finishStep(bound, runId, step, 'completed', workerResult.receipt.result)
         await persistTodoState()
         continue
@@ -1954,11 +2308,15 @@ export class SessionRuntimeService {
           : workerResult.receipt.validation
 
       todoManager.markCompleted(index, undefined, blockedReason)
-      bound.manager.appendCustomMessageEntry(
-        'task_result',
-        [{ type: 'text', text: `任务 ${index + 1} 被阻塞：\n${blockedReason}` }],
-        false,
-      )
+      planTaskResultAugmentationsByIndex.set(index, {
+        augmentationKind: 'plan_task_result',
+        stepId: step.stepId,
+        content: formatPlanTaskResultBlock({
+          todoIndex: index,
+          status: 'blocked',
+          content: `任务 ${index + 1} 被阻塞：\n${blockedReason}`,
+        }),
+      })
       await this.finishStep(bound, runId, step, 'failed', blockedReason)
       await persistTodoState()
     }
@@ -1968,10 +2326,15 @@ export class SessionRuntimeService {
     // The synthetic "please provide the final answer" prompt is structurally stable
     // but semantically generic, so using it would collapse recall into near-identical
     // queries across runs and lose the user's actual retrieval intent.
-    const finalContextMessages = await this.buildContextMessages(
+    const finalContextMessages = this.buildBaseContextMessages(bound)
+    const finalMemoryRecallMessages = await this.buildMemoryRecallContextMessages(
       bound,
       'plan',
       originalUserQueryForFinalRecall,
+    )
+    const planTaskResultAugmentations = buildPlanTaskResultAugmentationsFromTodos(
+      todoManager.getItems(),
+      planTaskResultAugmentationsByIndex,
     )
     const finalPrompt: SessionMessageRecord = {
       role: 'user',
@@ -1983,7 +2346,10 @@ export class SessionRuntimeService {
       bound,
       runId,
       finalPrompt,
+      userMessageId,
       finalContextMessages,
+      finalMemoryRecallMessages,
+      planTaskResultAugmentations,
       model,
       apiKey,
       {

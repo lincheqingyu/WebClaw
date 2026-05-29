@@ -30,6 +30,7 @@ import {
 } from './types.js'
 import type { ConfirmationBroker } from '../runtime/confirmation-broker.js'
 import { compactInLoop } from '../runtime/context/in-loop-compactor.js'
+import type { AiRequestPromptFrameMeta } from '../runtime/context/prompt-frame-builder.js'
 
 const MAX_CONSECUTIVE_FAILURES = 2
 
@@ -38,6 +39,7 @@ export interface WorkerRunOptions {
   todoSnapshot: string
   systemPrompt: string
   memoryRecall?: AgentMessage[]
+  runtimeContextMessages?: AgentMessage[]
   model: Model<'openai-completions'>
   apiKey: string
   thinkingLevel?: ThinkingLevel
@@ -55,6 +57,7 @@ export interface WorkerRunOptions {
   sessionId?: string
   runId?: RunId
   confirmationBroker?: ConfirmationBroker
+  promptFrame?: AiRequestPromptFrameMeta
 }
 
 interface LegacyWorkerRunOptions {
@@ -78,6 +81,7 @@ interface LegacyWorkerRunOptions {
   sessionId?: string
   runId?: RunId
   confirmationBroker?: ConfirmationBroker
+  promptFrame?: AiRequestPromptFrameMeta
 }
 
 interface NormalizedWorkerRunOptions {
@@ -85,6 +89,7 @@ interface NormalizedWorkerRunOptions {
   todoSnapshot: string
   systemPrompt: string
   memoryRecall: AgentMessage[]
+  runtimeContextMessages: AgentMessage[]
   model: Model<'openai-completions'>
   apiKey: string
   workspaceDir: string
@@ -102,6 +107,7 @@ interface NormalizedWorkerRunOptions {
   sessionId?: string
   runId?: RunId
   confirmationBroker?: ConfirmationBroker
+  promptFrame?: AiRequestPromptFrameMeta
 }
 
 export interface WorkerResult {
@@ -159,6 +165,8 @@ async function normalizeWorkerRunOptions(options: WorkerAgentOptions): Promise<N
     return {
       ...options,
       memoryRecall: options.memoryRecall ?? [],
+      runtimeContextMessages: options.runtimeContextMessages ?? [],
+      promptFrame: options.promptFrame,
     }
   }
 
@@ -177,6 +185,7 @@ async function normalizeWorkerRunOptions(options: WorkerAgentOptions): Promise<N
     todoSnapshot: options.prompt,
     systemPrompt,
     memoryRecall: [],
+    runtimeContextMessages: [],
     model: options.model,
     apiKey: options.apiKey,
     workspaceDir: resolveWorkspaceRoot(),
@@ -194,6 +203,7 @@ async function normalizeWorkerRunOptions(options: WorkerAgentOptions): Promise<N
     sessionId: options.sessionId,
     runId: options.runId,
     confirmationBroker: options.confirmationBroker,
+    promptFrame: options.promptFrame,
   }
 }
 
@@ -231,6 +241,7 @@ export async function runWorkerAgent(options: WorkerAgentOptions): Promise<Worke
 
   const promptMessages: AgentMessage[] = [
     ...normalized.memoryRecall,
+    ...normalized.runtimeContextMessages,
     createWorkerUserMessage(normalized.todoSnapshot),
   ]
 
@@ -251,17 +262,23 @@ export async function runWorkerAgent(options: WorkerAgentOptions): Promise<Worke
       maxRetryDelayMs: normalized.maxRetryDelayMs,
       metadata: normalized.metadata,
       onPayload: (payload) => {
-        mutateProviderPayload(normalized.model, payload)
+        const providerPayloadMutation = mutateProviderPayload({
+          model: normalized.model,
+          payload,
+          promptFrame: normalized.promptFrame,
+        })
         logAiRequestSnapshot({
           role: 'worker',
           model: normalized.model,
           systemPrompt: normalized.systemPrompt,
           promptMessages,
-          contextMessages: [],
+          contextMessages: normalized.runtimeContextMessages,
           sessionKey: normalized.sessionKey,
           sessionId: normalized.sessionId,
           runId: normalized.runId,
           llmSessionId: normalized.llmSessionId,
+          promptFrame: normalized.promptFrame,
+          providerPayloadMutation,
         }, payload)
       },
       convertToLlm: (messages: AgentMessage[]) =>

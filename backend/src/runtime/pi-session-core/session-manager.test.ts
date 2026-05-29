@@ -91,6 +91,26 @@ test('branchWithSummary creates alternate branch context', () => {
   assert.equal(texts[2], 'new answer')
 })
 
+test('getCurrentBranchEntries follows current leaf path and excludes sibling branch', () => {
+  const manager = createManager()
+  const rootId = manager.appendMessage({ role: 'user', content: 'root question', timestamp: Date.now() - 10_000 })
+  const mainLeafId = manager.appendMessage({
+    role: 'assistant',
+    content: [{ type: 'text', text: 'main answer' }],
+    timestamp: Date.now() - 9_000,
+    provider: 'openai',
+    model: 'glm-4.7',
+  })
+
+  manager.branch(rootId)
+  const siblingLeafId = manager.appendMessage({ role: 'user', content: 'sibling question', timestamp: Date.now() - 8_000 })
+
+  assert.deepEqual(manager.getCurrentBranchEntries().map((entry) => entry.id), [rootId, siblingLeafId])
+
+  manager.branch(mainLeafId)
+  assert.deepEqual(manager.getCurrentBranchEntries().map((entry) => entry.id), [rootId, mainLeafId])
+})
+
 test('buildSessionContext strips thinking blocks and keeps assistant text', () => {
   const manager = createManager()
   manager.appendThinkingLevelChange('medium')
@@ -116,4 +136,21 @@ test('buildSessionContext strips thinking blocks and keeps assistant text', () =
   assert.equal(assistant.content.length, 1)
   assert.equal(assistant.content[0]?.type, 'text')
   assert.equal('text' in assistant.content[0] ? assistant.content[0].text : '', 'final answer')
+})
+
+test('buildSessionContext excludes display=false custom messages from model context', () => {
+  const manager = createManager()
+  manager.appendMessage({ role: 'user', content: 'visible user', timestamp: Date.now() - 10_000 })
+  manager.appendCustomMessageEntry('visible_note', 'visible custom context', true)
+  manager.appendCustomMessageEntry('hidden_note', 'hidden custom context', false)
+
+  const context = manager.buildSessionContext()
+  const texts = context.messages.map((message) => {
+    if (typeof message.content === 'string') return message.content
+    return message.content
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('\n')
+  })
+
+  assert.deepEqual(texts, ['visible user', 'visible custom context'])
 })

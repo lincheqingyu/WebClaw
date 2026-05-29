@@ -30,6 +30,7 @@ import { logger } from '../utils/logger.js'
 import { ensureMemoryFiles, recordMemoryTurnAndMaybeFlush } from '../memory/index.js'
 import type { ConfirmationBroker } from '../runtime/confirmation-broker.js'
 import { compactInLoop } from '../runtime/context/in-loop-compactor.js'
+import type { AiRequestPromptFrameMeta } from '../runtime/context/prompt-frame-builder.js'
 
 /** 记忆轮次计数状态（会话级） */
 export interface TurnState {
@@ -64,6 +65,7 @@ export interface SimpleAgentOptions {
   runId?: RunId
   confirmationBroker?: ConfirmationBroker
   streamFn?: StreamFn
+  promptFrame?: AiRequestPromptFrameMeta
 }
 
 /** Simple Agent 运行结果 */
@@ -101,6 +103,7 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
     runId,
     confirmationBroker,
     streamFn,
+    promptFrame,
   } = options
   const workspaceDir = resolveWorkspaceRoot()
 
@@ -156,7 +159,7 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
       maxRetryDelayMs,
       metadata,
       onPayload: (payload) => {
-        mutateProviderPayload(model, payload)
+        const providerPayloadMutation = mutateProviderPayload({ model, payload, promptFrame })
         logAiRequestSnapshot({
           role: 'simple',
           model,
@@ -167,6 +170,8 @@ export async function runSimpleAgent(options: SimpleAgentOptions): Promise<Simpl
           sessionId,
           runId,
           llmSessionId,
+          promptFrame,
+          providerPayloadMutation,
         }, payload)
       },
       convertToLlm: (agentMessages: AgentMessage[]) =>

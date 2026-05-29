@@ -84,9 +84,9 @@ test('buildAugmentedContext keeps compaction summary before recent tail and avoi
   })
 
   const texts = contextMessages.map(extractText)
-  assert.equal(texts[0], 'memory block')
-  assert.equal(texts[1], formatCompactionContextMessage('summary before kept tail'))
-  assert.equal(texts[2], 'recent message 41')
+  assert.equal(texts[0], formatCompactionContextMessage('summary before kept tail'))
+  assert.equal(texts[1], 'recent message 41')
+  assert.equal(texts.at(-1), 'memory block')
   assert.equal(texts.length, 12)
 })
 
