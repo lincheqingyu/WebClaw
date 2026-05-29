@@ -12,10 +12,7 @@ export {
 } from './store.js'
 export {
   buildEventExtractionInput,
-  createMemoryCoordinator,
   extractAndPersistOnTurnComplete,
-  getMemoryCoordinator,
-  MemoryCoordinator,
 } from './coordinator.js'
 export { extractEventMemoryItems } from './extraction-runner.js'
 export { deriveProjectId } from './project-id.js'

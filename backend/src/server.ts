@@ -32,7 +32,6 @@ import { createSessionRuntimeService } from './runtime/index.js'
 import { initializeSessionTools } from './agent/tools/index.js'
 import { closePool, getPool } from './db/client.js'
 import { runMigrations } from './db/migrate.js'
-import { createMemoryCoordinator } from './memory/coordinator.js'
 
 /** 优雅关闭超时（毫秒） */
 const SHUTDOWN_TIMEOUT = 30_000
@@ -49,10 +48,6 @@ async function main(): Promise<void> {
   } else {
     logger.info('PostgreSQL 未启用，继续使用文件持久化链路')
   }
-
-  const memoryCoordinator = config.PG_ENABLED
-    ? await createMemoryCoordinator(config)
-    : null
 
   // 3. 创建 Express 应用
   const app = createApp()
@@ -106,7 +101,6 @@ async function main(): Promise<void> {
 
     try {
       await sessionRuntime.shutdown()
-      await memoryCoordinator?.shutdown()
 
       if (config.PG_ENABLED) {
         await closePool()

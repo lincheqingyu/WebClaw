@@ -91,7 +91,7 @@ import { clearCurrentToolSessionKey, setCurrentToolSessionKey } from '../agent/t
 import { getPool } from '../db/client.js'
 import { deleteRuntimeSession, syncRuntimeSession } from '../db/runtime-session-repository.js'
 import { applyCompactionIfNeeded } from '../memory/compact.js'
-import { extractAndPersistOnTurnComplete, getMemoryCoordinator } from '../memory/coordinator.js'
+import { extractAndPersistOnTurnComplete } from '../memory/coordinator.js'
 import { syncTodosToForesight } from '../memory/foresight-sync.js'
 import { buildMemoryRecallBlockLegacy, buildMemoryRecallMessages } from '../memory/prompt-injector.js'
 import { buildAugmentedContext } from './context/augmented-context-builder.js'
@@ -1926,13 +1926,8 @@ export class SessionRuntimeService {
       }
       clearCurrentToolSessionKey()
       const finalProjection = await this.refreshProjection(sessionKey)
-      const memoryCoordinator = getMemoryCoordinator()
       try {
-        if (memoryCoordinator?.enabled) {
-          await memoryCoordinator.onTurnCompleted(finalProjection, manager)
-        } else {
-          await extractAndPersistOnTurnComplete(finalProjection, manager, this.runtimePaths.workspaceDir)
-        }
+        await extractAndPersistOnTurnComplete(finalProjection, manager, this.runtimePaths.workspaceDir)
       } catch (error) {
         logger.warn('[memory] turn 完成后的事件提取落库失败，跳过本轮记忆写入', {
           sessionKey,
