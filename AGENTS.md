@@ -177,7 +177,7 @@ Lecquy 的 system prompt 文件体系**已锁定**。决策来源：[`docs/项�
 
 按重要性递减：
 
-1. **记忆** —— 真正"懂我"的载体。当前 `memory/flush.ts` 产出价值低（每轮只 dump 最后两条消息），`memory/extraction-runner.ts` 写好了但 `PG_ENABLED` 默认 false。这是命脉。
+1. **记忆** —— 真正"懂我"的载体。已移除低价值的 `memory/flush.ts` 每日 dump 路径，当前写入主线是 turn 完成后经 `extractAndPersistOnTurnComplete` 抽取并落到 SQLite；下一步重点是写入质量、召回质量和长期稳定性。这是命脉。
 2. **自我进化** —— 系统提示动态构建、Skill 热加载、文件工具能写 `.lecquy/`，**接口已就位**，缺的只是"反思动作"循环。
 3. **上下文工程 + 主循环** —— `FrozenSystemSnapshot` + `<system_prompt_update>` 的 system prompt 架构已锁定，缺的是按新边界落到 prompt builder、API replay 和 compact / resnapshot 链路。
 4. **自建 harness** —— Lecquy 自己长 agent loop / 文件工具 / bash / git / Plan 模式 / subagent 调度 / 沙箱 / diff 渲染。第一批做到 80%，kira 就能在自己机器上**卸载 Codex / Claude Code**。Model 层始终外调 Anthropic / DeepSeek API，不自训。详见 §1.2 近期形态。
@@ -283,7 +283,7 @@ docs/
 
 **为什么这是灾难性的**：JARVIS 化的 Lecquy 是要用 3-5-10 年的，不是 3 个月。熵增问题在第 3 个月还看不出来，在第 18 个月会**毁掉项目核心命脉**。
 
-**当下不做的理由**：现阶段 memory "写"都没做对（flush.ts 价值低、extraction-runner 没真正跑起来），先把"写"做稳，再来设计"删 / 衰减 / 归档"。否则现在做的"删除策略"是建立在还没成型的写策略之上，必返工。
+**当下不做的理由**：现阶段 memory "写"刚从低价值 flush dump 收敛到 SQLite 事件抽取，写入质量和召回稳定性仍需真实使用验证；先把"写"做稳，再来设计"删 / 衰减 / 归档"。否则现在做的"删除策略"是建立在还没成型的写策略之上，必返工。
 
 **未来要解决的方向（占位，不展开）**：
 
@@ -293,7 +293,7 @@ docs/
 - 冷热分层（热记忆 in-memory 注入，冷记忆只在显式查询时召回）
 - 用户可控的"遗忘 / 修正"接口（kira 主动告诉 Lecquy："这条记错了 / 这条已经过时"）
 
-**启动触发条件**：memory 底座"写"稳定（flush + extraction 真正跑起来）+ Lecquy 实际使用满 3-6 个月、出现第一次"过时记忆误导决策"的真实案例后，立项专门设计。
+**启动触发条件**：SQLite 事件抽取写入稳定 + Lecquy 实际使用满 3-6 个月、出现第一次"过时记忆误导决策"的真实案例后，立项专门设计。
 
 ### 8.2 工具调度层的"内化决策"还没有标准
 
